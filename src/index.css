@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Hide app header, sidebars, toast, and buttons when printing */
+  header,
+  aside,
+  #modal-logo-editor-backdrop,
+  button,
+  .no-print {
+    display: none !important;
+  }
+
+  #printable-qr-standee {
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 10px !important;
+  }
+}

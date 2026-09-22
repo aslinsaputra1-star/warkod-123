@@ -1,0 +1,6 @@
+{
+  "name": "Warung Bang Kobra - POS & Order Management",
+  "description": "Aplikasi web Point of Sale (POS) Hybrid Offline-First & Online, PWA installable, QR Code Takeaway & Delivery mandiri pelanggan tanpa instal aplikasi, pesanan WhatsApp, kontrol stok, sinkronisasi Cloud Firebase, dan laporan keuangan Warung Bang Kobra.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

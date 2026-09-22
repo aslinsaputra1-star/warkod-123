@@ -1,0 +1,267 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net - Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Core Verification Helpers ---
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Bootstrap check for developer/owner runtime email
+    function isBootstrapOwner() {
+      return isSignedIn() && request.auth.token.email == 'rayyanarasid549@gmail.com';
+    }
+
+    function hasUserDoc() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function getUserRole() {
+      return hasUserDoc() ? getUserDoc().role : (isBootstrapOwner() ? 'Owner' : 'Customer');
+    }
+
+    // OWNER: Memiliki akses penuh
+    function isOwner() {
+      return isSignedIn() && (
+        isBootstrapOwner() ||
+        getUserRole() == 'Owner' ||
+        getUserRole() == 'owner'
+      );
+    }
+
+    // ADMIN: Memiliki akses operasional yang lebih luas
+    function isAdmin() {
+      return isOwner() || (
+        isSignedIn() && (
+          getUserRole() == 'Admin' ||
+          getUserRole() == 'admin' ||
+          getUserRole() == 'ADMIN'
+        )
+      );
+    }
+
+    // KASIR: Hanya dapat mengakses data sesuai role
+    function isKasir() {
+      return isAdmin() || (
+        isSignedIn() && (
+          getUserRole() == 'Kasir' ||
+          getUserRole() == 'kasir' ||
+          getUserRole() == 'KASIR'
+        )
+      );
+    }
+
+    // STAFF: Akses dapur dan operasional dasar
+    function isStaff() {
+      return isKasir() || (
+        isSignedIn() && (
+          getUserRole() == 'Staff' ||
+          getUserRole() == 'staff'
+        )
+      );
+    }
+
+    // --- Entity Validation Helpers ---
+
+    // USERS: Never store raw password or PIN in Firestore!
+    function isValidUser(data) {
+      return data.uid is string &&
+        data.uid.size() > 0 &&
+        data.uid.size() <= 128 &&
+        data.nama is string &&
+        data.nama.size() > 0 &&
+        data.nama.size() <= 100 &&
+        data.role in ['Owner', 'Admin', 'Kasir', 'Staff', 'Customer', 'owner', 'admin', 'kasir', 'staff', 'customer', 'ADMIN', 'KASIR'] &&
+        (!('password' in data)) &&
+        (!('pin' in data)) &&
+        (!('raw_password' in data));
+    }
+
+    function isValidProduct(data) {
+      return data.id is string &&
+        data.id.size() > 0 &&
+        data.id.size() <= 64 &&
+        data.nama is string &&
+        data.nama.size() > 0 &&
+        data.nama.size() <= 120 &&
+        data.kategori is string &&
+        data.kategori.size() > 0 &&
+        data.kategori.size() <= 50 &&
+        data.harga_jual is number &&
+        data.harga_jual >= 0 &&
+        data.stok is number &&
+        (!('password' in data));
+    }
+
+    function isValidCategory(data) {
+      return data.id is string &&
+        data.id.size() > 0 &&
+        data.id.size() <= 64 &&
+        data.nama is string &&
+        data.nama.size() > 0 &&
+        data.nama.size() <= 64 &&
+        (!('password' in data));
+    }
+
+    function isValidOrder(data) {
+      return data.id_transaksi is string &&
+        data.id_transaksi.size() > 0 &&
+        data.id_transaksi.size() <= 64 &&
+        data.nama_pelanggan is string &&
+        data.nama_pelanggan.size() > 0 &&
+        data.nama_pelanggan.size() <= 100 &&
+        data.total is number &&
+        data.total >= 0 &&
+        data.status in ['Pending', 'Diproses', 'Selesai', 'Dibatalkan'] &&
+        (!('password' in data));
+    }
+
+    function isValidExpense(data) {
+      return data.id is string &&
+        data.id.size() > 0 &&
+        data.id.size() <= 64 &&
+        data.kategori is string &&
+        data.kategori.size() > 0 &&
+        data.kategori.size() <= 64 &&
+        data.jumlah is number &&
+        data.jumlah >= 0 &&
+        (!('password' in data));
+    }
+
+    function isValidReport(data) {
+      return data.id is string &&
+        data.id.size() > 0 &&
+        data.id.size() <= 64 &&
+        data.total_omset is number &&
+        data.total_transaksi is number &&
+        (!('password' in data));
+    }
+
+    // --- Collection Security Rules ---
+
+    // Ping / connection test
+    match /_connection_test/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // USERS COLLECTION
+    // KHUSUS OWNER: Hanya Owner yang berhak mendaftarkan akun login, kasir, dan admin
+    // Password / PIN TIDAK disimpan di Firestore
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (
+        isOwner() ||
+        (isSignedIn() && request.auth.uid == userId)
+      );
+
+      allow list: if isOwner();
+
+      // HANYA OWNER yang berhak mendaftarkan dan membuat akun baru
+      allow create: if isValidId(userId) && isValidUser(incoming()) && isOwner();
+
+      allow update: if isValidId(userId) && isValidUser(incoming()) && (
+        isOwner() ||
+        (isSignedIn() && request.auth.uid == userId && incoming().role == existing().role && incoming().diff(existing()).affectedKeys().hasOnly(['nama', 'no_hp', 'avatar_url', 'email', 'status', 'updated_at']))
+      );
+
+      allow delete: if isValidId(userId) && isOwner();
+    }
+
+    // PRODUCTS CATALOG
+    // Pelanggan dapat membaca katalog menu secara publik/QR Code.
+    // POS Kasir, Admin, & Pengelola dapat menyinkronkan data katalog menu dengan validasi skema produk & integritas ID.
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isValidId(productId) && isValidProduct(incoming()) && incoming().id == productId;
+      allow update: if isValidId(productId) && isValidProduct(incoming()) && (
+        isAdmin() ||
+        isStaff() ||
+        incoming().id == existing().id
+      );
+      allow delete: if isValidId(productId) && (isAdmin() || isSignedIn());
+    }
+
+    // CATEGORIES
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow create: if isValidId(categoryId) && isValidCategory(incoming()) && incoming().id == categoryId;
+      allow update: if isValidId(categoryId) && isValidCategory(incoming()) && (
+        isAdmin() ||
+        isStaff() ||
+        incoming().id == existing().id
+      );
+      allow delete: if isValidId(categoryId) && (isAdmin() || isSignedIn());
+    }
+
+    // ORDERS & POS TRANSACTIONS
+    // Customers can create QR self-orders, Cashier POS can record sales & sync offline orders
+    // Schema integrity, boundary checks, and ID poisoning protection enforced by isValidId & isValidOrder
+    match /orders/{orderId} {
+      allow read: if true;
+
+      allow create: if isValidId(orderId) && isValidOrder(incoming());
+
+      allow update: if isValidId(orderId) && isValidOrder(incoming()) && (
+        isStaff() ||
+        incoming().id_transaksi == existing().id_transaksi
+      );
+
+      allow delete: if isValidId(orderId) && (isAdmin() || isSignedIn());
+    }
+
+    // EXPENSES COLLECTION
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn() || isAdmin();
+      allow create, update: if isValidId(expenseId) && isValidExpense(incoming()) && (isSignedIn() || isAdmin());
+      allow delete: if isValidId(expenseId) && (isOwner() || isSignedIn());
+    }
+
+    // REPORTS & DASHBOARD ANALYTICS
+    match /reports/{reportId} {
+      allow read: if isSignedIn() || isAdmin();
+      allow create, update: if isValidId(reportId) && isValidReport(incoming()) && (isSignedIn() || isAdmin());
+      allow delete: if isValidId(reportId) && (isOwner() || isSignedIn());
+    }
+
+    // CUSTOMERS
+    match /customers/{customerId} {
+      allow read: if true;
+      allow create, update: if isValidId(customerId) && (isSignedIn() || isKasir());
+      allow delete: if isValidId(customerId) && (isAdmin() || isSignedIn());
+    }
+
+    // STOCK MUTATIONS
+    match /stock_mutations/{mutationId} {
+      allow read: if true;
+      allow create: if isValidId(mutationId) && (isSignedIn() || isStaff()) && incoming().qty is number;
+      allow update, delete: if isValidId(mutationId) && (isAdmin() || isSignedIn());
+    }
+
+    // STORE SETTINGS
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isValidId(settingId) && (isSignedIn() || isOwner());
+    }
+  }
+}

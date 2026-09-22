@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1c1917" />
+      <stop offset="100%" stop-color="#0c0a09" />
+    </linearGradient>
+    <linearGradient id="flameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#dc2626" />
+      <stop offset="50%" stop-color="#f97316" />
+      <stop offset="100%" stop-color="#facc15" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Base Circle with Border -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+  <rect x="12" y="12" width="488" height="488" rx="116" fill="none" stroke="#f59e0b" stroke-width="4" stroke-opacity="0.35" />
+
+  <!-- Outer Ring Accent -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="url(#goldGrad)" stroke-width="3" stroke-dasharray="16 8" opacity="0.6" />
+
+  <!-- Stylized Cobra Hood & Flame Silhouette -->
+  <g filter="url(#glow)">
+    <!-- Cobra Hood Wings -->
+    <path d="M256 90 C180 140 120 220 120 310 C120 370 160 410 210 410 C240 410 256 390 256 390 C256 390 272 410 302 410 C352 410 392 370 392 310 C392 220 332 140 256 90 Z" fill="url(#flameGrad)" />
+
+    <!-- Cobra Head / Forked Tongue Emblem -->
+    <path d="M256 120 C230 160 210 220 220 270 C230 320 256 350 256 350 C256 350 282 320 292 270 C302 220 282 160 256 120 Z" fill="#1c1917" stroke="#facc15" stroke-width="5" />
+
+    <!-- Sharp Eye Accents -->
+    <circle cx="236" cy="220" r="8" fill="#facc15" />
+    <circle cx="276" cy="220" r="8" fill="#facc15" />
+
+    <!-- Culinary Spoon & Spatula Cross at bottom -->
+    <path d="M210 410 L302 410" stroke="#facc15" stroke-width="8" stroke-linecap="round" />
+  </g>
+
+  <!-- Typography: BANG KOBRA -->
+  <text x="256" y="445" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="900" font-size="28" fill="#fef08a" text-anchor="middle" letter-spacing="4">BANG KOBRA</text>
+  <text x="256" y="470" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-weight="700" font-size="14" fill="#fbbf24" text-anchor="middle" letter-spacing="2">POS &amp; KASIR</text>
+</svg>
