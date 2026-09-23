@@ -31,6 +31,7 @@ import {
   ArrowLeft,
   Utensils,
   ReceiptText,
+  Lock,
 } from 'lucide-react';
 import { Product, StoreSettings, Transaction } from '../../types';
 import {
@@ -47,7 +48,7 @@ import { BrandLogo } from '../Common/BrandLogo';
 interface PublicMenuCustomerViewProps {
   products: Product[];
   settings: StoreSettings;
-  onOpenPOS?: () => void;
+  onOpenStaffLogin?: () => void;
   onOrderCreated?: (transaction: Transaction) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
@@ -61,7 +62,7 @@ export interface CartEntry {
 export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
   products,
   settings,
-  onOpenPOS,
+  onOpenStaffLogin,
   onOrderCreated,
   showToast,
 }) => {
@@ -432,32 +433,25 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
             <Share2 className="w-3 h-3" />
             <span>Bagikan</span>
           </button>
-
-          {onOpenPOS && (
-            <button
-              type="button"
-              onClick={onOpenPOS}
-              className="flex items-center gap-1 bg-stone-900/80 hover:bg-stone-850 text-orange-400 hover:text-orange-300 border border-orange-500/40 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer"
-            >
-              <LogIn className="w-3 h-3" />
-              <span className="hidden md:inline">Buka POS Kasir</span>
-            </button>
-          )}
         </div>
       </div>
 
       {/* Main Hero Header */}
-      <header className="relative bg-gradient-to-b from-stone-900 to-stone-950 border-b border-stone-800/80 px-4 pt-6 pb-6 sm:pb-8">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+      <header className="relative bg-gradient-to-b from-stone-900 to-stone-950 border-b border-stone-800/80 px-4 pt-6 pb-6 sm:pb-8 overflow-hidden animate-fade-in-up">
+        {/* Ambient Warm Backlight */}
+        <div className="absolute top-0 left-1/4 w-96 h-48 bg-orange-600/10 rounded-full blur-3xl pointer-events-none -translate-y-1/2" />
+        <div className="absolute top-1/2 right-10 w-72 h-36 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 relative z-10">
           <div className="flex flex-col sm:flex-row items-center sm:items-start text-center sm:text-left gap-4">
-            {/* Warung Avatar / Logo */}
-            <div className="relative shrink-0">
+            {/* Warung Avatar / Logo with Pulsing Glow */}
+            <div className="relative shrink-0 transition-transform duration-300 hover:scale-105">
               <BrandLogo
                 src={settings.logoUrl}
                 alt={settings.storeName}
                 size="2xl"
                 rounded="rounded-2xl"
-                className="shadow-xl shadow-orange-950/40 border-2 border-orange-500/40"
+                className="shadow-xl shadow-orange-950/40 border-2 border-orange-500/40 animate-pulse-glow"
               />
               <span className="absolute -bottom-1 -right-1 flex h-4 w-4">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -471,7 +465,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                 <h1 className="text-2xl sm:text-3xl font-black text-stone-100 tracking-tight">
                   {settings.storeName}
                 </h1>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse-glow-emerald">
                   <BadgeCheck className="w-3.5 h-3.5" />
                   <span>Buka Sekarang</span>
                 </span>
@@ -482,12 +476,12 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
               </p>
 
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-1 text-[11px] text-stone-400 font-medium">
-                <span className="flex items-center gap-1 text-stone-300">
+                <span className="flex items-center gap-1 text-stone-300 hover:text-orange-300 transition-colors">
                   <Clock className="w-3.5 h-3.5 text-orange-400" />
                   <span>{settings.onlineMenuHours || '09:00 - 22:00 WIB'}</span>
                 </span>
 
-                <span className="flex items-center gap-1 text-stone-300">
+                <span className="flex items-center gap-1 text-stone-300 hover:text-red-300 transition-colors">
                   <MapPin className="w-3.5 h-3.5 text-red-400" />
                   <span className="max-w-[220px] truncate">{settings.address}</span>
                 </span>
@@ -496,7 +490,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                   href={`https://wa.me/${sanitizeWhatsAppNumber(settings.whatsappNumber)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 hover:underline font-bold"
+                  className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 hover:underline font-bold transition-all hover:scale-105"
                 >
                   <MessageCircle className="w-3.5 h-3.5" />
                   <span>Chat WA Warung</span>
@@ -507,7 +501,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
 
           {/* Quick Action Badges */}
           <div className="flex flex-row md:flex-col items-center sm:items-end gap-2 shrink-0">
-            <div className="flex items-center gap-2 bg-stone-900 border border-stone-800 rounded-2xl p-2 px-3 shadow-inner">
+            <div className="flex items-center gap-2 bg-stone-900 border border-stone-800 rounded-2xl p-2 px-3 shadow-inner hover:scale-105 hover:border-orange-500/40 transition-all duration-300 cursor-default">
               <Bike className="w-4 h-4 text-orange-400" />
               <div className="text-left">
                 <div className="text-[10px] uppercase font-bold text-stone-400">Pengiriman</div>
@@ -515,7 +509,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 bg-stone-900 border border-stone-800 rounded-2xl p-2 px-3 shadow-inner">
+            <div className="flex items-center gap-2 bg-stone-900 border border-stone-800 rounded-2xl p-2 px-3 shadow-inner hover:scale-105 hover:border-amber-500/40 transition-all duration-300 cursor-default">
               <Sparkles className="w-4 h-4 text-amber-400" />
               <div className="text-left">
                 <div className="text-[10px] uppercase font-bold text-stone-400">Pemesanan</div>
@@ -556,7 +550,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
             <button
               type="button"
               onClick={() => setQuickFilter('all')}
-              className={`px-3 py-1.5 rounded-xl font-bold transition shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all duration-200 shrink-0 cursor-pointer active:scale-95 hover:scale-105 ${
                 quickFilter === 'all'
                   ? 'bg-orange-500 text-stone-950 shadow-md shadow-orange-950/40'
                   : 'bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200'
@@ -568,9 +562,9 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
             <button
               type="button"
               onClick={() => setQuickFilter('popular')}
-              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all duration-200 shrink-0 cursor-pointer active:scale-95 hover:scale-105 ${
                 quickFilter === 'popular'
-                  ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-950/40'
+                  ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-950/40 animate-pulse-glow'
                   : 'bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200'
               }`}
             >
@@ -581,7 +575,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
             <button
               type="button"
               onClick={() => setQuickFilter('spicy')}
-              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all duration-200 shrink-0 cursor-pointer active:scale-95 hover:scale-105 ${
                 quickFilter === 'spicy'
                   ? 'bg-red-500 text-white shadow-md shadow-red-950/40'
                   : 'bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200'
@@ -594,7 +588,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
             <button
               type="button"
               onClick={() => setQuickFilter('under15k')}
-              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition shrink-0 cursor-pointer ${
+              className={`px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 transition-all duration-200 shrink-0 cursor-pointer active:scale-95 hover:scale-105 ${
                 quickFilter === 'under15k'
                   ? 'bg-emerald-500 text-stone-950 shadow-md shadow-emerald-950/40'
                   : 'bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200'
@@ -613,10 +607,10 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                   key={cat}
                   type="button"
                   onClick={() => setSelectedCategory(cat)}
-                  className={`pb-2.5 px-3 text-xs sm:text-sm font-extrabold whitespace-nowrap transition border-b-2 shrink-0 cursor-pointer ${
+                  className={`pb-2.5 px-3 text-xs sm:text-sm font-extrabold whitespace-nowrap transition-all duration-200 border-b-2 shrink-0 cursor-pointer active:scale-95 ${
                     isSelected
-                      ? 'border-orange-500 text-orange-400'
-                      : 'border-transparent text-stone-400 hover:text-stone-200'
+                      ? 'border-orange-500 text-orange-400 scale-105'
+                      : 'border-transparent text-stone-400 hover:text-stone-100 hover:border-stone-700'
                   }`}
                 >
                   {cat}
@@ -636,7 +630,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
           </div>
 
           {filteredProducts.length === 0 ? (
-            <div className="text-center py-16 px-4 bg-stone-900/40 rounded-3xl border border-stone-800/80 space-y-3">
+            <div className="text-center py-16 px-4 bg-stone-900/40 rounded-3xl border border-stone-800/80 space-y-3 animate-fade-in-up">
               <Utensils className="w-12 h-12 text-stone-400 mx-auto opacity-50" />
               <h3 className="text-lg font-bold text-stone-200">Menu Tidak Ditemukan</h3>
               <p className="text-xs text-stone-400 max-w-sm mx-auto">
@@ -649,14 +643,14 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                   setSelectedCategory('Semua');
                   setQuickFilter('all');
                 }}
-                className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-orange-400 rounded-xl text-xs font-bold transition cursor-pointer"
+                className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-orange-400 rounded-xl text-xs font-bold transition-all hover:scale-105 cursor-pointer"
               >
                 Reset Filter Pencarian
               </button>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredProducts.map((product) => {
+              {filteredProducts.map((product, index) => {
                 const cartEntry = cart[product.id];
                 const isOutOfStock = product.stok <= 0;
                 const isSpicy =
@@ -669,22 +663,23 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                     key={product.id}
                     id={`menu-card-${product.id}`}
                     onClick={() => setSelectedProductDetail(product)}
-                    className="group bg-stone-900/80 hover:bg-stone-900 border border-stone-800/80 hover:border-stone-700 rounded-3xl p-3.5 flex flex-col justify-between transition shadow-md hover:shadow-xl hover:shadow-orange-950/20 cursor-pointer"
+                    style={{ animationDelay: `${Math.min(index * 45, 450)}ms` }}
+                    className="group bg-stone-900/80 hover:bg-stone-900 border border-stone-800/80 hover:border-orange-500/40 rounded-3xl p-3.5 flex flex-col justify-between transition-all duration-300 shadow-md hover:shadow-2xl hover:shadow-orange-950/30 hover:-translate-y-1.5 cursor-pointer animate-fade-in-up"
                   >
                     <div>
-                      {/* Product Image */}
+                      {/* Product Image with Hover Zoom */}
                       <div className="relative aspect-video sm:aspect-[4/3] w-full bg-stone-950 rounded-2xl overflow-hidden mb-3">
                         {product.foto ? (
                           <img
                             src={product.foto}
                             alt={product.nama}
-                            className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-out"
                             referrerPolicy="no-referrer"
                             loading="lazy"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center bg-stone-950 text-stone-400">
-                            <Utensils className="w-8 h-8 opacity-40" />
+                            <Utensils className="w-8 h-8 opacity-40 group-hover:scale-110 transition-transform duration-300" />
                           </div>
                         )}
 
@@ -694,7 +689,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                             {product.kategori}
                           </span>
                           {isSpicy && (
-                            <span className="bg-red-600/90 text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-sm">
+                            <span className="bg-red-600/90 text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-sm shimmer-effect">
                               Pedas
                             </span>
                           )}
@@ -735,23 +730,23 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                         </span>
                       ) : cartEntry ? (
                         <div
-                          className="flex items-center gap-2 bg-orange-500/20 border border-orange-500/40 p-1 rounded-2xl"
+                          className="flex items-center gap-2 bg-orange-500/20 border border-orange-500/40 p-1 rounded-2xl animate-pop-in"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <button
                             type="button"
                             onClick={(e) => handleUpdateQty(product.id, -1, e)}
-                            className="w-7 h-7 rounded-xl bg-stone-950 hover:bg-stone-800 text-white flex items-center justify-center transition cursor-pointer"
+                            className="w-7 h-7 rounded-xl bg-stone-950 hover:bg-stone-800 text-white flex items-center justify-center active:scale-80 hover:scale-110 transition-transform cursor-pointer"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="text-xs font-black text-orange-300 min-w-[18px] text-center">
+                          <span className="text-xs font-black text-orange-300 min-w-[18px] text-center animate-pop-in">
                             {cartEntry.qty}
                           </span>
                           <button
                             type="button"
                             onClick={(e) => handleUpdateQty(product.id, 1, e)}
-                            className="w-7 h-7 rounded-xl bg-orange-500 hover:bg-orange-400 text-stone-950 flex items-center justify-center font-bold transition cursor-pointer"
+                            className="w-7 h-7 rounded-xl bg-orange-500 hover:bg-orange-400 text-stone-950 flex items-center justify-center font-bold active:scale-80 hover:scale-110 transition-transform cursor-pointer shadow-sm shadow-orange-500/50"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -760,7 +755,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                         <button
                           type="button"
                           onClick={(e) => handleAddToCart(product, e)}
-                          className="min-h-[36px] px-3.5 py-1.5 rounded-2xl bg-orange-500 hover:bg-orange-400 text-stone-950 text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-orange-950/50 transition cursor-pointer"
+                          className="min-h-[36px] px-3.5 py-1.5 rounded-2xl bg-orange-500 hover:bg-orange-400 text-stone-950 text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-orange-950/50 active:scale-90 hover:scale-105 hover:shadow-orange-500/30 transition-all cursor-pointer"
                         >
                           <Plus className="w-3.5 h-3.5 stroke-[3]" />
                           <span>Pesan</span>
@@ -891,12 +886,12 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
 
       {/* Floating Bottom Cart Bar */}
       {totalItemCount > 0 && !isCartDrawerOpen && !completedOrder && (
-        <div className="fixed bottom-4 left-4 right-4 z-40 max-w-md mx-auto animate-in slide-in-from-bottom duration-200">
-          <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-red-600 text-white p-3.5 sm:p-4 rounded-3xl shadow-2xl shadow-orange-950/80 flex items-center justify-between gap-3 border border-orange-400/40">
+        <div className="fixed bottom-4 left-4 right-4 z-40 max-w-md mx-auto animate-slide-up-bounce">
+          <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-red-600 text-white p-3.5 sm:p-4 rounded-3xl shadow-2xl shadow-orange-950/80 flex items-center justify-between gap-3 border border-orange-400/40 animate-pulse-glow">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center relative shrink-0">
                 <ShoppingBag className="w-6 h-6 text-white" />
-                <span className="absolute -top-1 -right-1 bg-stone-950 text-orange-400 text-[11px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-orange-500 shadow-md">
+                <span className="absolute -top-1 -right-1 bg-stone-950 text-orange-400 text-[11px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-orange-500 shadow-md animate-pop-in">
                   {totalItemCount}
                 </span>
               </div>
@@ -912,10 +907,10 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
               type="button"
               id="btn-open-cart-checkout"
               onClick={() => setIsCartDrawerOpen(true)}
-              className="min-h-[44px] px-4 py-2 rounded-2xl bg-stone-950 hover:bg-stone-900 text-orange-400 hover:text-orange-300 text-xs font-black flex items-center gap-1.5 shadow-md transition cursor-pointer"
+              className="group min-h-[44px] px-4 py-2 rounded-2xl bg-stone-950 hover:bg-stone-900 text-orange-400 hover:text-orange-300 text-xs font-black flex items-center gap-1.5 shadow-md active:scale-95 hover:scale-105 transition-all cursor-pointer"
             >
               <span>Lihat Pesanan</span>
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
           </div>
         </div>
@@ -1267,13 +1262,13 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
                 id="btn-submit-order-wa"
                 onClick={handleSubmitOrder}
                 disabled={isSubmitting}
-                className="w-full min-h-[48px] py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-950/60 transition cursor-pointer disabled:opacity-50"
+                className="w-full min-h-[48px] py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-sm flex items-center justify-center gap-2 shadow-xl shadow-emerald-950/60 active:scale-95 hover:scale-[1.02] transition-all cursor-pointer disabled:opacity-50 shimmer-effect"
               >
                 {isSubmitting ? (
                   <span>Memproses Pesanan...</span>
                 ) : (
                   <>
-                    <MessageCircle className="w-5 h-5" />
+                    <MessageCircle className="w-5 h-5 animate-bounce" />
                     <span>Pesan Sekarang & Kirim ke WhatsApp</span>
                   </>
                 )}
@@ -1290,8 +1285,8 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
       {/* Completed Order Confirmation & Real-time Live Tracking Modal */}
       {completedOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-          <div className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-md p-6 text-center space-y-5 shadow-2xl">
-            <div className="w-16 h-16 rounded-3xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+          <div className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-md p-6 text-center space-y-5 shadow-2xl animate-pop-in">
+            <div className="w-16 h-16 rounded-3xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-inner animate-check-pop animate-pulse-glow-emerald">
               <CheckCircle2 className="w-8 h-8" />
             </div>
 
@@ -1303,7 +1298,7 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
             </div>
 
             {/* Live Real-time Status Card */}
-            <div className="p-4 bg-stone-950 rounded-2xl border border-stone-800 text-left space-y-2.5">
+            <div className="p-4 bg-stone-950 rounded-2xl border border-stone-800 text-left space-y-2.5 animate-pulse-glow">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider">Status Live:</span>
                 <span
@@ -1371,14 +1366,15 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
           </p>
         </div>
 
-        {onOpenPOS && (
-          <div className="pt-2">
+        {onOpenStaffLogin && (
+          <div className="pt-3 border-t border-stone-850">
             <button
               type="button"
-              onClick={onOpenPOS}
-              className="text-[11px] text-orange-400/80 hover:text-orange-400 hover:underline font-bold transition cursor-pointer"
+              onClick={onOpenStaffLogin}
+              className="text-[11px] text-stone-500 hover:text-amber-400 font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 mx-auto px-3 py-1.5 rounded-lg hover:bg-stone-900 border border-transparent hover:border-stone-800"
             >
-              🔐 Masuk ke Sistem Kasir POS (Khusus Staf / Pemilik)
+              <Lock className="w-3.5 h-3.5 text-stone-500" />
+              <span>Portal Karyawan & Pemilik Warung (Masuk dengan PIN)</span>
             </button>
           </div>
         )}

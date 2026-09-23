@@ -17,6 +17,7 @@ import {
   User,
   LogOut,
   LogIn,
+  ShoppingBag,
 } from 'lucide-react';
 import { StoreSettings, SyncState, UserRole, WarungUser } from '../types';
 import { normalizeRole, getRoleBadgeInfo, ROLE_CONFIGS, NormalizedRole } from '../utils/rbac';
@@ -39,6 +40,7 @@ interface HeaderProps {
   onOpenQuickSale?: () => void;
   onOpenAIBot?: () => void;
   onOpenLogoEditor?: () => void;
+  onOpenCustomerView?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -55,8 +57,8 @@ export const Header: React.FC<HeaderProps> = ({
   onRoleChange,
   onOpenAIBot,
   onOpenLogoEditor,
+  onOpenCustomerView,
 }) => {
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
 
   const currentRole = currentUser ? normalizeRole(currentUser.role) : normalizeRole(settings.role);
   const roleBadge = getRoleBadgeInfo(currentRole);
@@ -208,8 +210,22 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </button>
 
-          {/* User Profile & Role Switcher */}
-          <div className="relative">
+          {/* Switch to Customer View (for Staff/Owner) */}
+          {onOpenCustomerView && (
+            <button
+              type="button"
+              id="btn-header-open-customer-view"
+              onClick={onOpenCustomerView}
+              title="Lihat Tampilan Menu Pelanggan (Customer View)"
+              className="min-h-[40px] hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-stone-850 text-amber-400 border border-amber-500/30 text-xs font-bold transition cursor-pointer"
+            >
+              <ShoppingBag className="w-4 h-4 text-amber-400" />
+              <span>Menu Pelanggan</span>
+            </button>
+          )}
+
+          {/* User Profile & Auth Controls */}
+          <div className="relative flex items-center gap-1.5">
             {currentUser ? (
               <div className="flex items-center gap-1">
                 <button
@@ -244,16 +260,18 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </button>
 
-                {/* Quick Role Switch Dropdown Trigger */}
-                <button
-                  type="button"
-                  id="btn-switch-role-menu"
-                  onClick={() => setShowRoleMenu(!showRoleMenu)}
-                  title="Ganti Peran Cepat (RBAC)"
-                  className="min-h-[40px] px-1.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-400 hover:text-stone-200 border border-stone-800 transition cursor-pointer"
-                >
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
+                {onLogout && (
+                  <button
+                    type="button"
+                    id="btn-header-logout"
+                    onClick={onLogout}
+                    title="Keluar dari akun staf"
+                    className="min-h-[40px] px-2.5 rounded-xl bg-stone-900 hover:bg-rose-950/40 text-stone-400 hover:text-rose-400 border border-stone-800 hover:border-rose-800/40 transition cursor-pointer flex items-center gap-1 text-xs"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline text-[11px] font-bold">Keluar</span>
+                  </button>
+                )}
               </div>
             ) : (
               <button
@@ -269,78 +287,8 @@ export const Header: React.FC<HeaderProps> = ({
                 className="min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-950/50 transition cursor-pointer"
               >
                 <LogIn className="w-4 h-4" />
-                <span>Masuk</span>
+                <span>Masuk Staf</span>
               </button>
-            )}
-
-            {showRoleMenu && (
-              <div
-                id="role-dropdown-menu"
-                className="absolute right-0 mt-2 w-64 rounded-2xl bg-stone-900 border-2 border-stone-700 shadow-2xl py-2 z-50 text-xs animate-fadeIn"
-              >
-                <div className="px-3.5 py-1.5 text-[11px] text-stone-400 font-bold border-b border-stone-800 flex items-center justify-between">
-                  <span>Pilih Peran (RBAC 5 Role):</span>
-                  {onNavigateToLogin ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        onNavigateToLogin();
-                      }}
-                      className="text-[10px] text-orange-400 hover:underline font-bold"
-                    >
-                      Menu Login
-                    </button>
-                  ) : (
-                    <span className="text-[10px] text-orange-400 font-mono">Live Switch</span>
-                  )}
-                </div>
-
-                <div className="py-1 space-y-0.5">
-                  {availableRoles.map((r) => {
-                    const cfg = ROLE_CONFIGS[r];
-                    const isSelected = currentRole === r;
-
-                    return (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => {
-                          handleRoleChange(r as UserRole);
-                          setShowRoleMenu(false);
-                        }}
-                        className={`w-full px-3.5 py-2 text-left flex items-center justify-between hover:bg-stone-800 transition cursor-pointer ${
-                          isSelected ? 'bg-stone-800/90 text-white font-black' : 'text-stone-300'
-                        }`}
-                      >
-                        <div className="min-w-0 pr-2">
-                          <p className="text-xs truncate">{cfg.title}</p>
-                          <p className="text-[10px] text-stone-400 truncate">{cfg.badge}</p>
-                        </div>
-                        {isSelected && (
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {currentUser && onLogout && (
-                  <div className="pt-1.5 border-t border-stone-800 px-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRoleMenu(false);
-                        onLogout();
-                      }}
-                      className="w-full px-3 py-2 rounded-xl text-left flex items-center gap-2 text-rose-400 hover:bg-rose-950/40 transition cursor-pointer font-bold text-xs"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span>Keluar (Logout)</span>
-                    </button>
-                  </div>
-                )}
-              </div>
             )}
           </div>
 

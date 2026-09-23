@@ -62,6 +62,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [selectedUserForSwitch, setSelectedUserForSwitch] = useState<WarungUser | null>(null);
+  const [switchPin, setSwitchPin] = useState('');
+  const [switchError, setSwitchError] = useState('');
 
   // Sync edit form state if currentUser changes
   React.useEffect(() => {
@@ -482,70 +485,150 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
           {/* TAB 4: SWITCH ACCOUNT */}
           {activeTab === 'switch_account' && (
-            <div className="space-y-3">
-              <p className="text-xs text-stone-400">
-                Pilih pengguna di bawah untuk beralih sesi secara langsung:
-              </p>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-stone-400">
+                  Pilih akun pengguna staf untuk beralih sesi:
+                </p>
+                <span className="text-[10px] text-amber-400 font-bold bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/40">
+                  Wajib Verifikasi PIN
+                </span>
+              </div>
 
-              <div className="space-y-2">
-                {allUsers.map((user) => {
-                  const isCurrent = currentUser.id === user.id;
-                  const roleBadge = getRoleBadgeInfo(user.role);
-
-                  return (
+              {selectedUserForSwitch ? (
+                <div className="p-4 rounded-2xl bg-stone-950 border border-stone-800 space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-stone-800">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-stone-800 flex items-center justify-center font-bold text-xs text-white">
+                        {selectedUserForSwitch.nama.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-bold text-xs text-white">{selectedUserForSwitch.nama}</p>
+                        <p className="text-[10px] text-orange-400 font-bold">{selectedUserForSwitch.role}</p>
+                      </div>
+                    </div>
                     <button
-                      key={user.id}
                       type="button"
                       onClick={() => {
-                        if (isCurrent) return;
-                        StorageService.setAuthUser(user);
-                        onSwitchUser(user);
-                        showToast(`Sesi dialihkan ke ${user.nama} (${user.role})`, 'success');
-                        onClose();
+                        setSelectedUserForSwitch(null);
+                        setSwitchPin('');
+                        setSwitchError('');
                       }}
-                      className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition cursor-pointer ${
-                        isCurrent
-                          ? 'bg-stone-850 border-orange-500/50 ring-1 ring-orange-500/30'
-                          : 'bg-stone-950 border-stone-800 hover:bg-stone-850 hover:border-stone-700'
-                      }`}
+                      className="text-[11px] text-stone-400 hover:text-white"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl overflow-hidden bg-stone-800 border border-stone-700 shrink-0">
-                          {user.avatar_url ? (
-                            <img
-                              src={user.avatar_url}
-                              alt={user.nama}
-                              className="w-full h-full object-cover"
-                            />
+                      Batal
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-300 mb-1">
+                      Masukkan PIN Akun {selectedUserForSwitch.nama}:
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={8}
+                      value={switchPin}
+                      onChange={(e) => {
+                        setSwitchPin(e.target.value);
+                        setSwitchError('');
+                      }}
+                      placeholder="Ketik PIN akun..."
+                      className="w-full h-10 px-3 bg-stone-900 border border-stone-750 focus:border-red-500 rounded-xl text-white text-xs outline-none tracking-widest font-mono"
+                      autoFocus
+                    />
+                  </div>
+
+                  {switchError && (
+                    <p className="text-[11px] font-bold text-rose-400">{switchError}</p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!switchPin.trim()) {
+                        setSwitchError('PIN wajib diisi!');
+                        return;
+                      }
+                      if (selectedUserForSwitch.pin !== switchPin.trim()) {
+                        setSwitchError('PIN salah! Akses ditolak.');
+                        return;
+                      }
+                      // Correct PIN
+                      StorageService.setAuthUser(selectedUserForSwitch);
+                      onSwitchUser(selectedUserForSwitch);
+                      showToast(`Sesi dialihkan ke ${selectedUserForSwitch.nama} (${selectedUserForSwitch.role})`, 'success');
+                      setSelectedUserForSwitch(null);
+                      setSwitchPin('');
+                      onClose();
+                    }}
+                    className="w-full min-h-[38px] rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition"
+                  >
+                    Verifikasi PIN & Masuk
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {allUsers.map((user) => {
+                    const isCurrent = currentUser.id === user.id;
+                    const roleBadge = getRoleBadgeInfo(user.role);
+
+                    return (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => {
+                          if (isCurrent) return;
+                          setSelectedUserForSwitch(user);
+                          setSwitchPin('');
+                          setSwitchError('');
+                        }}
+                        className={`w-full p-3 rounded-2xl border text-left flex items-center justify-between transition cursor-pointer ${
+                          isCurrent
+                            ? 'bg-stone-850 border-orange-500/50 ring-1 ring-orange-500/30'
+                            : 'bg-stone-950 border-stone-800 hover:bg-stone-850 hover:border-stone-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl overflow-hidden bg-stone-800 border border-stone-700 shrink-0">
+                            {user.avatar_url ? (
+                              <img
+                                src={user.avatar_url}
+                                alt={user.nama}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center font-bold text-stone-300 text-xs">
+                                {user.nama.charAt(0)}
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="font-extrabold text-stone-100 text-xs">{user.nama}</p>
+                            <p className="text-[11px] text-stone-400 font-mono">@{user.username}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${roleBadge.badgeBg} ${roleBadge.badgeText} ${roleBadge.badgeBorder}`}
+                          >
+                            {roleBadge.badge}
+                          </span>
+                          {isCurrent ? (
+                            <span className="text-[10px] font-extrabold text-emerald-400">Aktif</span>
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center font-bold text-stone-300 text-xs">
-                              {user.nama.charAt(0)}
-                            </div>
+                            <span className="text-[10px] text-amber-400/80 font-semibold flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              <span>Pilih</span>
+                            </span>
                           )}
                         </div>
-
-                        <div>
-                          <p className="font-extrabold text-stone-100 text-xs">{user.nama}</p>
-                          <p className="text-[11px] text-stone-400 font-mono">@{user.username}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${roleBadge.badgeBg} ${roleBadge.badgeText} ${roleBadge.badgeBorder}`}
-                        >
-                          {roleBadge.badge}
-                        </span>
-                        {isCurrent ? (
-                          <span className="text-[10px] font-extrabold text-emerald-400">Aktif</span>
-                        ) : (
-                          <ArrowRight className="w-4 h-4 text-stone-500" />
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {onOpenLogin && (
                 <div className="pt-2 border-t border-stone-800">

@@ -43,6 +43,7 @@ interface LoginViewProps {
   onLoginSuccess: (user: WarungUser) => void;
   onLogout?: () => void;
   onNavigate?: (tab: ActiveTab) => void;
+  onBackToCustomerMenu?: () => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -52,6 +53,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   onLoginSuccess,
   onLogout,
   onNavigate,
+  onBackToCustomerMenu,
   showToast = (_msg: string, _type?: 'success' | 'error' | 'info') => {},
 }) => {
   // Form State
@@ -221,6 +223,17 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <p className="text-xs sm:text-sm text-stone-400 max-w-xl mx-auto">
             Masuk ke sistem POS Warung Bang Kobra dengan peran Anda untuk mengakses Kasir, Manajemen Stok, Laporan Keuangan, dan Pengaturan.
           </p>
+
+          {onBackToCustomerMenu && (
+            <button
+              type="button"
+              onClick={onBackToCustomerMenu}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-stone-900 hover:bg-stone-850 text-amber-400 border border-amber-500/30 text-xs font-bold transition shadow-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Kembali ke Menu Pelanggan (Customer View)</span>
+            </button>
+          )}
         </div>
 
         {/* Current Active Account Card (if logged in) */}

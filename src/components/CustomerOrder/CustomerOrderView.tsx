@@ -374,18 +374,6 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
               </p>
             </div>
           </div>
-
-          {/* Admin / POS Switch (if requested or for owner testing) */}
-          {onBackToApp && (
-            <button
-              onClick={onBackToApp}
-              title="Kembali ke Layar Kasir / Admin"
-              className="flex items-center gap-1 text-[11px] font-bold text-stone-300 hover:text-amber-400 bg-stone-800 hover:bg-stone-750 px-2.5 py-1.5 rounded-xl border border-stone-700 transition shrink-0"
-            >
-              <Store className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden xs:inline">Mode Kasir</span>
-            </button>
-          )}
         </div>
       </header>
 
@@ -515,22 +503,23 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
               </p>
             </div>
           ) : (
-            filteredProducts.map((product) => {
+            filteredProducts.map((product, index) => {
               const inCart = cart[product.id];
               const isOutOfStock = product.stok <= 0;
 
               return (
                 <div
                   key={product.id}
-                  className="bg-stone-900 border border-stone-800/80 rounded-2xl p-3 sm:p-3.5 flex items-center gap-3 hover:border-stone-700 transition shadow-sm"
+                  style={{ animationDelay: `${Math.min(index * 35, 350)}ms` }}
+                  className="group bg-stone-900 border border-stone-800/80 hover:border-amber-500/40 rounded-2xl p-3 sm:p-3.5 flex items-center gap-3 transition-all duration-300 shadow-sm hover:shadow-lg hover:shadow-amber-950/20 hover:-translate-y-0.5 animate-fade-in-up"
                 >
                   {/* Photo */}
                   <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-stone-950 shrink-0 relative border border-stone-800">
                     <img
                       src={product.foto}
                       alt={product.nama}
-                      className={`w-full h-full object-cover transition-transform ${
-                        isOutOfStock ? 'grayscale opacity-60' : 'hover:scale-105'
+                      className={`w-full h-full object-cover transition-transform duration-500 ${
+                        isOutOfStock ? 'grayscale opacity-60' : 'group-hover:scale-110'
                       }`}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src =
@@ -635,16 +624,16 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
 
       {/* Floating Bottom Cart Bar */}
       {totalCartCount > 0 && !isCartOpen && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 p-3 sm:p-4 bg-gradient-to-t from-stone-950 via-stone-950/95 to-transparent">
+        <div className="fixed bottom-0 left-0 right-0 z-40 p-3 sm:p-4 bg-gradient-to-t from-stone-950 via-stone-950/95 to-transparent animate-slide-up-bounce">
           <div className="max-w-2xl mx-auto">
             <button
               type="button"
               id="btn-open-cart"
               onClick={() => setIsCartOpen(true)}
-              className="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 hover:from-amber-500 hover:to-orange-500 text-stone-950 font-black p-3.5 rounded-2xl shadow-xl shadow-amber-950/60 flex items-center justify-between transition active:scale-98 cursor-pointer"
+              className="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 hover:from-amber-500 hover:to-orange-500 text-stone-950 font-black p-3.5 rounded-2xl shadow-xl shadow-amber-950/60 flex items-center justify-between transition-all duration-300 active:scale-95 hover:scale-[1.01] cursor-pointer animate-pulse-glow"
             >
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-xl bg-stone-950/80 text-amber-400 flex items-center justify-center font-bold text-xs">
+                <div className="w-7 h-7 rounded-xl bg-stone-950/80 text-amber-400 flex items-center justify-center font-bold text-xs animate-pop-in">
                   {totalCartCount}
                 </div>
                 <div className="text-left">
@@ -661,7 +650,7 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
                 <span className="text-base font-black text-stone-950">
                   {formatRupiah(grandTotal)}
                 </span>
-                <ChevronRight className="w-5 h-5 text-stone-950" />
+                <ChevronRight className="w-5 h-5 text-stone-950 transition-transform group-hover:translate-x-1" />
               </div>
             </button>
           </div>
@@ -997,8 +986,8 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
       {/* Completed Order Modal / Success Screen with Flow Stepper */}
       {completedOrder && (
         <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-md p-6 shadow-2xl text-center space-y-5">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/50">
+          <div className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-md p-6 shadow-2xl text-center space-y-5 animate-pop-in">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/50 animate-check-pop animate-pulse-glow-emerald">
               <CheckCircle2 className="w-8 h-8" />
             </div>
 

@@ -167,10 +167,14 @@ export default function App() {
   // User Authentication State & RBAC
   const [currentUser, setCurrentUser] = useState<WarungUser | null>(() => {
     const saved = StorageService.getAuthUser();
-    if (saved) return saved;
-    const users = StorageService.getUsers();
-    return users[0] || null;
+    // Only restore session if authenticated with an authorized internal staff role
+    if (saved && ['Owner', 'Admin', 'Kasir', 'Staff'].includes(saved.role)) {
+      return saved;
+    }
+    // Unauthenticated visitors/customers default to null (Customer Layout)
+    return null;
   });
+  const [isStaffLoginMode, setIsStaffLoginMode] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
@@ -372,8 +376,13 @@ export default function App() {
     StorageService.saveSettings(updated);
   };
 
-  // Switch Role (Owner / Admin / Kasir / Staff / Customer)
+  // Switch Role (Owner / Admin / Kasir / Staff) - Only accessible to authenticated staff
   const handleRoleChange = (role: UserRole) => {
+    if (!currentUser || currentUser.role === 'Customer') {
+      showToast('Akses dibatasi. Masuk dengan akun staf untuk mengubah peran.', 'error');
+      return;
+    }
+
     const updatedSettings = { ...settings, role };
     setSettings(updatedSettings);
     StorageService.saveSettings(updatedSettings);
@@ -402,6 +411,10 @@ export default function App() {
   const handleLoginSuccess = (user: WarungUser) => {
     setCurrentUser(user);
     StorageService.setAuthUser(user);
+    setIsStaffLoginMode(false);
+    setIsLoginModalOpen(false);
+    setIsPublicMenuMode(false);
+    setIsCustomerMode(false);
     setSettings((prev) => {
       const updated = { ...prev, role: user.role };
       StorageService.saveSettings(updated);
@@ -420,8 +433,11 @@ export default function App() {
   const handleLogout = () => {
     StorageService.logout();
     setCurrentUser(null);
-    showToast('Anda telah keluar dari akun', 'info');
-    setIsLoginModalOpen(true);
+    setIsStaffLoginMode(false);
+    setIsLoginModalOpen(false);
+    setIsPublicMenuMode(false);
+    setIsCustomerMode(false);
+    showToast('Anda telah keluar dari akun staf.', 'info');
   };
 
   const handleUpdateCurrentUser = (updatedUser: WarungUser) => {
@@ -639,41 +655,18 @@ export default function App() {
   // Low Stock Count for Badge
   const lowStockCount = products.filter((p) => p.stok <= p.stok_minimum).length;
 
-  // Render Public Online Web Menu Mode (from bio link or shared WhatsApp link)
-  if (isPublicMenuMode) {
-    return (
-      <PublicMenuCustomerView
-        products={products}
-        settings={settings}
-        onOpenPOS={() => {
-          setIsPublicMenuMode(false);
-          setActiveTab('pos');
-          if (typeof window !== 'undefined') {
-            window.history.replaceState({}, '', window.location.pathname);
-          }
-        }}
-        onOrderCreated={(newTx) => {
-          setTransactions((prev) => [newTx, ...prev]);
-          setProducts(StorageService.getProducts());
-        }}
-        showToast={showToast}
-      />
-    );
-  }
+  // Check if current user is an authenticated internal staff member (Owner, Admin, Kasir, Staff)
+  const isStaffAuthenticated =
+    currentUser !== null &&
+    ['Owner', 'Admin', 'Kasir', 'Staff'].includes(currentUser.role);
 
-  // Render Customer Self-Order Mode directly when scanned via QR Code
+  // 1. Direct Customer QR Self-Order Mode (from QR Code camera scan)
   if (isCustomerMode) {
     return (
       <CustomerOrderView
         products={products}
         settings={settings}
         initialOrderType={customerOrderType}
-        onBackToApp={() => {
-          setIsCustomerMode(false);
-          if (typeof window !== 'undefined') {
-            window.history.replaceState({}, '', window.location.pathname);
-          }
-        }}
         onOrderCreated={(newTx) => {
           setTransactions((prev) => [newTx, ...prev]);
           setProducts(StorageService.getProducts());
@@ -683,7 +676,80 @@ export default function App() {
     );
   }
 
-  const effectiveRole = currentUser ? currentUser.role : settings.role;
+  // 2. Unauthenticated / Customer Portal: Layout Pelanggan Terpisah
+  if (!isStaffAuthenticated) {
+    // If user explicitly requests Staff Login view
+    if (isStaffLoginMode || activeTab === 'login') {
+      return (
+        <div className="min-h-screen bg-stone-950 flex flex-col justify-center">
+          <LoginView
+            currentUser={currentUser}
+            settings={settings}
+            onLoginSuccess={(user) => {
+              handleLoginSuccess(user);
+            }}
+            onBackToCustomerMenu={() => {
+              setIsStaffLoginMode(false);
+              setActiveTab('public_menu');
+            }}
+            showToast={showToast}
+          />
+        </div>
+      );
+    }
+
+    // Default Customer Menu: isolated public catalogue with takeaway/delivery ordering
+    return (
+      <PublicMenuCustomerView
+        products={products}
+        settings={settings}
+        onOpenStaffLogin={() => setIsStaffLoginMode(true)}
+        onOrderCreated={(newTx) => {
+          setTransactions((prev) => [newTx, ...prev]);
+          setProducts(StorageService.getProducts());
+        }}
+        showToast={showToast}
+      />
+    );
+  }
+
+  // 3. Authenticated Staff: Previewing Customer Menu
+  if (isPublicMenuMode) {
+    return (
+      <div className="min-h-screen flex flex-col bg-stone-950">
+        <div className="bg-amber-950/90 border-b border-amber-800/80 px-4 py-2 flex items-center justify-between text-xs text-amber-200">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold bg-amber-500 text-stone-950 px-2 py-0.5 rounded text-[10px] uppercase">
+              Mode Pratinjau
+            </span>
+            <span>
+              Anda sedang melihat tampilan Menu Pelanggan (sebagai {currentUser.nama} - {currentUser.role})
+            </span>
+          </div>
+          <button
+            onClick={() => setIsPublicMenuMode(false)}
+            className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-black rounded-xl transition text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
+          >
+            <span>Kembali ke Panel POS</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        <PublicMenuCustomerView
+          products={products}
+          settings={settings}
+          onOpenStaffLogin={() => setIsPublicMenuMode(false)}
+          onOrderCreated={(newTx) => {
+            setTransactions((prev) => [newTx, ...prev]);
+            setProducts(StorageService.getProducts());
+          }}
+          showToast={showToast}
+        />
+      </div>
+    );
+  }
+
+  // 4. Authenticated Staff: Internal Management Layout (Owner, Admin, Kasir, Staff)
+  const effectiveRole = currentUser.role;
   const isTabAuthorized = hasTabAccess(effectiveRole, activeTab);
 
   return (
@@ -703,6 +769,7 @@ export default function App() {
         onRoleChange={handleRoleChange}
         onOpenAIBot={() => setIsAIDrawerOpen(true)}
         onOpenLogoEditor={() => setIsLogoEditorOpen(true)}
+        onOpenCustomerView={() => setIsPublicMenuMode(true)}
       />
 
       {/* Realtime Order Alert Banner for Cashier (FIREBASE -> KASIR MENERIMA PESANAN) */}
