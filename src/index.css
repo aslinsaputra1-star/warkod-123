@@ -92,15 +92,18 @@
 }
 
 .animate-fade-in-up {
-  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .animate-slide-up-bounce {
-  animation: slideUpBounce 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slideUpBounce 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .animate-pop-in {
-  animation: popIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: popIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .animate-pulse-glow {
@@ -116,7 +119,8 @@
 }
 
 .animate-check-pop {
-  animation: checkPop 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: checkPop 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
 }
 
 .shimmer-effect {

@@ -92,6 +92,20 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedBank, setCopiedBank] = useState(false);
 
+  // Discreet staff entrance (5 rapid clicks on copyright for authorized personnel only)
+  const [secretTapCount, setSecretTapCount] = useState(0);
+  const handleSecretTap = () => {
+    if (!onOpenStaffLogin) return;
+    const next = secretTapCount + 1;
+    if (next >= 5) {
+      setSecretTapCount(0);
+      onOpenStaffLogin();
+    } else {
+      setSecretTapCount(next);
+      setTimeout(() => setSecretTapCount(0), 2000);
+    }
+  };
+
   // Completed Order State & Live Real-time Listener
   const [completedOrder, setCompletedOrder] = useState<{
     orderId: string;
@@ -660,10 +674,10 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
 
                 return (
                   <div
-                    key={product.id}
+                    key={`${selectedCategory}-${quickFilter}-${product.id}`}
                     id={`menu-card-${product.id}`}
                     onClick={() => setSelectedProductDetail(product)}
-                    style={{ animationDelay: `${Math.min(index * 45, 450)}ms` }}
+                    style={{ animationDelay: `${Math.min(index * 35, 300)}ms` }}
                     className="group bg-stone-900/80 hover:bg-stone-900 border border-stone-800/80 hover:border-orange-500/40 rounded-3xl p-3.5 flex flex-col justify-between transition-all duration-300 shadow-md hover:shadow-2xl hover:shadow-orange-950/30 hover:-translate-y-1.5 cursor-pointer animate-fade-in-up"
                   >
                     <div>
@@ -1355,29 +1369,20 @@ export const PublicMenuCustomerView: React.FC<PublicMenuCustomerViewProps> = ({
         </div>
       )}
 
-      {/* Footer */}
-      <footer className="mt-auto border-t border-stone-800/80 bg-stone-900/60 py-6 px-4 text-center text-xs text-stone-400 space-y-3">
+      {/* Footer (Clean & Isolated Customer View - No Staff Buttons) */}
+      <footer className="mt-auto border-t border-stone-800/80 bg-stone-900/60 py-6 px-4 text-center text-xs text-stone-400 space-y-2">
         <div className="max-w-md mx-auto space-y-1">
           <p className="font-bold text-stone-300">
             {settings.storeName} • {settings.address}
           </p>
-          <p className="text-[11px] text-stone-400">
-            Sistem Kasir & Menu Digital Online didukung oleh Warung Bang Kobra POS.
+          <p
+            onClick={handleSecretTap}
+            title="Warung Bang Kobra"
+            className="text-[11px] text-stone-400 select-none cursor-default"
+          >
+            © {new Date().getFullYear()} {settings.storeName}. Pesan Mandiri & Menu Online Digital.
           </p>
         </div>
-
-        {onOpenStaffLogin && (
-          <div className="pt-3 border-t border-stone-850">
-            <button
-              type="button"
-              onClick={onOpenStaffLogin}
-              className="text-[11px] text-stone-500 hover:text-amber-400 font-semibold transition cursor-pointer flex items-center justify-center gap-1.5 mx-auto px-3 py-1.5 rounded-lg hover:bg-stone-900 border border-transparent hover:border-stone-800"
-            >
-              <Lock className="w-3.5 h-3.5 text-stone-500" />
-              <span>Portal Karyawan & Pemilik Warung (Masuk dengan PIN)</span>
-            </button>
-          </div>
-        )}
       </footer>
     </div>
   );

@@ -509,8 +509,8 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
 
               return (
                 <div
-                  key={product.id}
-                  style={{ animationDelay: `${Math.min(index * 35, 350)}ms` }}
+                  key={`${selectedCategory}-${searchQuery}-${product.id}`}
+                  style={{ animationDelay: `${Math.min(index * 30, 250)}ms` }}
                   className="group bg-stone-900 border border-stone-800/80 hover:border-amber-500/40 rounded-2xl p-3 sm:p-3.5 flex items-center gap-3 transition-all duration-300 shadow-sm hover:shadow-lg hover:shadow-amber-950/20 hover:-translate-y-0.5 animate-fade-in-up"
                 >
                   {/* Photo */}

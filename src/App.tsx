@@ -174,7 +174,18 @@ export default function App() {
     // Unauthenticated visitors/customers default to null (Customer Layout)
     return null;
   });
-  const [isStaffLoginMode, setIsStaffLoginMode] = useState(false);
+  const [isStaffLoginMode, setIsStaffLoginMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const search = window.location.search;
+      return (
+        search.includes('staff=true') ||
+        search.includes('login=true') ||
+        search.includes('portal=staff') ||
+        search.includes('admin=true')
+      );
+    }
+    return false;
+  });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 

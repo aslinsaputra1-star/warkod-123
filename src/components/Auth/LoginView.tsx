@@ -420,7 +420,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                       id="input-login-view-identifier"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="Contoh: owner, kasir, 0812..., atau rayyan@..."
+                      placeholder="Masukkan Username atau Email Staf..."
                       className="w-full min-h-[48px] bg-stone-950 border-2 border-stone-800 focus:border-red-500 rounded-2xl px-4 pl-11 text-white text-sm outline-none transition"
                       required
                     />
