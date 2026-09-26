@@ -204,8 +204,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         <div className="px-6 py-5 bg-stone-950 border-b border-stone-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BrandLogo
-              src={settings.logoUrl}
-              alt={settings.storeName}
+              src={settings?.logoUrl}
+              alt={settings?.storeName}
               size="md"
               rounded="rounded-2xl"
               className="shadow-md shadow-red-950/40 shrink-0"
@@ -218,7 +218,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-stone-400">
-                {settings.storeName || 'Warung Bang Kobra'} • Sistem Otentikasi Terpadu
+                {settings?.storeName || 'Warung Bang Kobra'} • Sistem Otentikasi Terpadu
               </p>
             </div>
           </div>
@@ -348,7 +348,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               <span className="text-[10px] text-stone-400">1-Klik Masuk</span>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {users.filter(u => ['Owner', 'Admin', 'Kasir', 'Staff'].includes(u.role)).map((u) => {
+              {users.filter(u => ['Owner', 'Admin', 'ADMIN', 'Kasir', 'KASIR', 'Staff', 'Delivery', 'DELIVERY'].includes(u.role)).map((u) => {
                 const badge = getRoleBadgeInfo(u.role);
                 return (
                   <button

@@ -14,7 +14,13 @@ import {
   FileSpreadsheet,
 } from 'lucide-react';
 import { Transaction, Product, Expense } from '../../types';
-import { formatRupiah, formatDateIndo } from '../../utils/formatters';
+import {
+  formatRupiah,
+  formatDateIndo,
+  normalizeOrderStatus,
+  resolveOrderType,
+  getOrderStatusLabel,
+} from '../../utils/formatters';
 import { exportTransactionsToExcel } from '../../utils/excelHelper';
 
 interface ReportsViewProps {
@@ -38,10 +44,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Filtered Transactions based on date
+  // Filtered Transactions based on date (all non-cancelled transactions)
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
-      if (tx.status !== 'Selesai') return false;
+      if (normalizeOrderStatus(tx.status) === 'DIBATALKAN') return false;
 
       if (dateFilter === 'today') {
         return tx.tanggal === todayStr;
@@ -460,7 +466,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                       {tx.tanggal} {tx.jam}
                     </td>
                     <td className="py-3 px-3 text-stone-200">
-                      {tx.nama_pelanggan || 'Pelanggan Umum'}
+                      <div className="font-bold">{tx.nama_pelanggan || 'Pelanggan'}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-black border ${
+                            resolveOrderType(tx) === 'DELIVERY_DQM'
+                              ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          }`}
+                        >
+                          {resolveOrderType(tx) === 'DELIVERY_DQM' ? '[DELIVERY DQM]' : '[BUNGKUS]'}
+                        </span>
+                        <span className="text-[10px] text-stone-400 font-semibold">
+                          {getOrderStatusLabel(tx)}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-3 px-3 text-stone-300">
                       <div className="line-clamp-1 max-w-xs">

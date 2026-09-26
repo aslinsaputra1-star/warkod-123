@@ -287,6 +287,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
                         {normalizeRole(user.role) === 'Admin' && <Shield className="w-5 h-5 text-rose-400" />}
                         {normalizeRole(user.role) === 'Kasir' && <UserCheck className="w-5 h-5 text-orange-400" />}
                         {normalizeRole(user.role) === 'Staff' && <span>🍳</span>}
+                        {normalizeRole(user.role) === 'Delivery' && <span>🛵</span>}
                         {normalizeRole(user.role) === 'Customer' && <span>🛍️</span>}
                       </div>
                       <div>
@@ -551,10 +552,10 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
               <div className="p-3.5 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 space-y-1">
                 <div className="flex items-center gap-2 font-black text-emerald-400 text-xs">
-                  <span>🍳</span> <span>Staf Dapur</span>
+                  <span>🍳</span> <span>Staf Dapur &amp; 🛵 Petugas Delivery DQM</span>
                 </div>
                 <p className="text-[11px] text-stone-300 leading-relaxed">
-                  Operasional dapur: memantau tiket pesanan masuk, menyiapkan pesanan, dan mencatat mutasi bahan baku.
+                  Staf dapur memantau pesanan masuk &amp; stok, sedangkan Petugas Delivery DQM hanya mengakses antrian pengantaran Pesantren DQM dan mengubah status delivery.
                 </p>
               </div>
             </div>
@@ -678,6 +679,18 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
                     }`}
                   >
                     <span>🍳 Staf Dapur</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFormRole('Delivery')}
+                    className={`col-span-2 min-h-[46px] rounded-2xl border-2 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition ${
+                      formRole === 'Delivery' || formRole === 'DELIVERY'
+                        ? 'bg-teal-600 text-white border-teal-500 shadow-md'
+                        : 'bg-stone-950 text-stone-400 border-stone-800 hover:border-stone-700'
+                    }`}
+                  >
+                    <span>🛵 Petugas Delivery DQM</span>
                   </button>
                 </div>
               </div>

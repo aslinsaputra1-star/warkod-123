@@ -28,6 +28,14 @@ async function startServer() {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+  // Prevent browser from caching stale module bundles in preview iframe
+  app.use((req, res, next) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    next();
+  });
+
   // API Health Check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", app: "Warung Bang Kobra POS", timestamp: new Date().toISOString() });

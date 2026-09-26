@@ -140,14 +140,16 @@ service cloud.firestore {
       return data.id_transaksi is string &&
         data.id_transaksi.size() > 0 &&
         data.id_transaksi.size() <= 64 &&
-        data.nama_pelanggan is string &&
-        data.nama_pelanggan.size() > 0 &&
-        data.nama_pelanggan.size() <= 100 &&
-        data.total is number &&
-        data.total >= 0 &&
-        data.status in ['Pending', 'Diproses', 'Siap', 'Selesai', 'Dibatalkan', 'MENUNGGU', 'DIPROSES', 'SIAP', 'SELESAI', 'DIBATALKAN'] &&
-        (!('orderType' in data) || data.orderType in ['BUNGKUS', 'DELIVERY_DQM']) &&
-        (!('deliveryArea' in data) || data.deliveryArea == null || data.deliveryArea == 'DQM') &&
+        (!('nama_pelanggan' in data) || (data.nama_pelanggan is string && data.nama_pelanggan.size() <= 100)) &&
+        (!('total' in data) || (data.total is number && data.total >= 0)) &&
+        data.status in [
+          'Pending', 'Diproses', 'Siap', 'Selesai', 'Dibatalkan',
+          'MENUNGGU', 'DIPROSES', 'SIAP', 'SELESAI', 'DIBATALKAN',
+          'SIAP DIAMBIL', 'SIAP DIANTAR', 'DIANTAR', 'SEDANG DIANTAR',
+          'Menunggu Konfirmasi', 'Diproses Dapur', 'Siap Diambil', 'Diantar'
+        ] &&
+        (!('orderType' in data) || data.orderType in ['BUNGKUS', 'DELIVERY_DQM', 'Takeaway', 'Delivery']) &&
+        (!('deliveryArea' in data) || data.deliveryArea == null || data.deliveryArea == '' || data.deliveryArea == 'DQM') &&
         (!('password' in data));
     }
 

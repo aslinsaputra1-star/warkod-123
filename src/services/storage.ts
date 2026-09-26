@@ -10,6 +10,11 @@ import {
   WarungUser,
 } from '../types';
 import {
+  resolveOrderType,
+  normalizeOrderStatus,
+  normalizeDeliveryStatus,
+} from '../utils/formatters';
+import {
   INITIAL_PRODUCTS,
   INITIAL_SETTINGS,
   INITIAL_CUSTOMERS,
@@ -121,8 +126,9 @@ export class StorageService {
     const hasRayyan = users.some((u) => u.email === 'rayyanarasid549@gmail.com' || u.id === 'USR-RAYYAN');
     const hasOwner = users.some((u) => u.role === 'Owner' || u.username === 'owner');
     const hasStaff = users.some((u) => u.role === 'Staff');
+    const hasDelivery = users.some((u) => u.role === 'Delivery' || u.role === 'DELIVERY');
     const hasCustomer = users.some((u) => u.role === 'Customer');
-    if (!hasRayyan || !hasOwner || !hasStaff || !hasCustomer) {
+    if (!hasRayyan || !hasOwner || !hasStaff || !hasDelivery || !hasCustomer) {
       const merged = [...users];
       INITIAL_USERS.forEach((initUser) => {
         if (!merged.some((m) => m.id === initUser.id || (initUser.email && m.email === initUser.email))) {
@@ -190,7 +196,24 @@ export class StorageService {
 
   // TRANSACTIONS & INVOICE NUMBER GENERATION
   static getTransactions(): Transaction[] {
-    return safeGetItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, INITIAL_TRANSACTIONS);
+    const raw = safeGetItem<Transaction[]>(STORAGE_KEYS.TRANSACTIONS, INITIAL_TRANSACTIONS);
+    if (!Array.isArray(raw)) return INITIAL_TRANSACTIONS;
+    return raw.map((tx) => {
+      const ordType = resolveOrderType(tx);
+      const isDelivery = ordType === 'DELIVERY_DQM';
+      return {
+        ...tx,
+        status: normalizeOrderStatus(tx.status),
+        orderType: ordType,
+        tipe_pesanan: ordType,
+        deliveryArea: isDelivery ? 'DQM' : null,
+        deliveryLocation: isDelivery ? (tx.deliveryLocation ?? '') : null,
+        deliveryDetail: isDelivery ? (tx.deliveryDetail ?? '') : null,
+        deliveryFee: isDelivery ? Number(tx.deliveryFee ?? tx.biaya ?? 0) : 0,
+        deliveryStatus: isDelivery ? normalizeDeliveryStatus(tx) : null,
+        items: Array.isArray(tx.items) ? tx.items : [],
+      };
+    });
   }
 
   static saveTransactions(transactions: Transaction[]): void {

@@ -63,8 +63,20 @@ export function normalizeDeliveryStatus(
   return 'MENUNGGU';
 }
 
-export function getOrderStatusLabel(status?: string, orderType?: OrderType | string): string {
-  const norm = normalizeOrderStatus(status);
+export function getOrderStatusLabel(
+  statusOrTx?: string | Partial<Transaction> | null,
+  orderType?: OrderType | string
+): string {
+  if (statusOrTx && typeof statusOrTx === 'object') {
+    const resolvedType = resolveOrderType(statusOrTx);
+    if (resolvedType === 'DELIVERY_DQM') {
+      const ds = normalizeDeliveryStatus(statusOrTx);
+      return ds === 'DIANTAR' ? 'SEDANG DIANTAR' : ds;
+    }
+    const norm = normalizeOrderStatus(statusOrTx.status);
+    return norm === 'SIAP' ? 'SIAP DIAMBIL' : norm;
+  }
+  const norm = normalizeOrderStatus(typeof statusOrTx === 'string' ? statusOrTx : undefined);
   const isDelivery = orderType === 'DELIVERY_DQM' || orderType === 'Delivery';
   if (norm === 'SIAP') {
     return isDelivery ? 'SIAP DIANTAR' : 'SIAP DIAMBIL';

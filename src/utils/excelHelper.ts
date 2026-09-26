@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { Product, ProductCategory, Transaction, Expense, Customer } from '../types';
+import { resolveOrderType, formatDeliveryLocationSummary } from './formatters';
 
 /**
  * Helper to download Blob as file
@@ -224,7 +225,8 @@ export function exportTransactionsToExcel(
     'Kasir': tx.kasir,
     'Nama Pelanggan': tx.nama_pelanggan || '-',
     'No. WhatsApp': tx.no_whatsapp || '-',
-    'Tipe Pesanan': tx.tipe_pesanan || 'Dine-in/Takeaway',
+    'Jenis Pesanan': resolveOrderType(tx) === 'DELIVERY_DQM' ? 'DELIVERY DQM' : 'BUNGKUS',
+    'Lokasi Pengantaran': formatDeliveryLocationSummary(tx),
     'Metode Pembayaran': tx.metode_pembayaran,
     'Subtotal (Rp)': tx.subtotal,
     'Diskon (Rp)': tx.diskon,

@@ -411,7 +411,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   <span className="text-[10px] text-stone-400 font-medium">1-Klik Langsung Masuk</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {users.filter(u => ['Owner', 'Admin', 'Kasir', 'Staff'].includes(u.role)).map((u) => {
+                  {users.filter(u => ['Owner', 'Admin', 'ADMIN', 'Kasir', 'KASIR', 'Staff', 'Delivery', 'DELIVERY'].includes(u.role)).map((u) => {
                     const badge = getRoleBadgeInfo(u.role);
                     return (
                       <button
@@ -541,7 +541,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
               </div>
 
               <div className="space-y-3">
-                {(['Owner', 'Admin', 'Kasir', 'Staff', 'Customer'] as NormalizedRole[]).map((r) => {
+                {(['Owner', 'Admin', 'Kasir', 'Staff', 'Delivery', 'Customer'] as NormalizedRole[]).map((r) => {
                   const cfg = ROLE_CONFIGS[r];
                   return (
                     <div

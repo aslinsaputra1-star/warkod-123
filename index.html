@@ -23,6 +23,13 @@
               enumerable: true
             });
           }
+          if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for (var i = 0; i < registrations.length; i++) {
+                registrations[i].unregister();
+              }
+            }).catch(function() {});
+          }
         } catch (e) {
           // Graceful fallback
         }

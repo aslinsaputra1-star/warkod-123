@@ -143,7 +143,7 @@ export class AIService {
     if (q.includes('promo') || q.includes('broadcast') || q.includes('wa') || q.includes('whatsapp')) {
       const sampleProd = products[0]?.nama || 'Ayam Goreng Kobra';
       const samplePrice = products[0]?.harga_jual || 22000;
-      return `📢 **Contoh Draf Broadcast WhatsApp Promo:**\n\n"🔥 *PROMO MAKAN SIANG SPESIAL BANG KOBRA!* 🔥\n\nLaper tapi mager? Yuk merapat atau pesan langsung ke *${settings.storeName}*!\n\n🍗 *Paket Spesial:* ${sampleProd} cuma *Rp ${samplePrice.toLocaleString('id-ID')}*!\nSambal uleg pedas mantap siap bikin melek!\n\n🛵 Pesan sekarang via WA: wa.me/${settings.whatsappNumber.replace(/[^0-9]/g, '')}\n_Bisa makan di tempat, bungkus, atau delivery!_"\n\nSilakan salin draf di atas dan bagikan ke status atau grup pelanggan Anda!`;
+      return `📢 **Contoh Draf Broadcast WhatsApp Promo:**\n\n"🔥 *PROMO MAKAN SIANG SPESIAL BANG KOBRA!* 🔥\n\nLaper tapi mager? Yuk merapat atau pesan langsung ke *${settings.storeName}*!\n\n🍗 *Paket Spesial:* ${sampleProd} cuma *Rp ${samplePrice.toLocaleString('id-ID')}*!\nSambal uleg pedas mantap siap bikin melek!\n\n🛵 Pesan sekarang via WA: wa.me/${settings.whatsappNumber.replace(/[^0-9]/g, '')}\n_Tersedia layanan BUNGKUS (Ambil di Warung) & DELIVERY DQM (Khusus Area Pesantren DQM)!_"\n\nSilakan salin draf di atas dan bagikan ke status atau grup pelanggan Anda!`;
     }
 
     // Default friendly assistant fallback

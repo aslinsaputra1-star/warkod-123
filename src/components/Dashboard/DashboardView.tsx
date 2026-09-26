@@ -16,7 +16,13 @@ import {
   Bike,
 } from 'lucide-react';
 import { Transaction, Product, ActiveTab } from '../../types';
-import { formatRupiah, formatDateIndo } from '../../utils/formatters';
+import {
+  formatRupiah,
+  formatDateIndo,
+  normalizeOrderStatus,
+  resolveOrderType,
+  getOrderStatusLabel,
+} from '../../utils/formatters';
 
 interface DashboardViewProps {
   transactions: Transaction[];
@@ -33,9 +39,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // Metrics for Today
+  // Metrics for Today (all non-cancelled orders)
   const todayTransactions = useMemo(() => {
-    return transactions.filter((tx) => tx.tanggal === todayStr && tx.status === 'Selesai');
+    return transactions.filter(
+      (tx) => tx.tanggal === todayStr && normalizeOrderStatus(tx.status) !== 'DIBATALKAN'
+    );
   }, [transactions, todayStr]);
 
   const todaySales = useMemo(() => {
@@ -71,7 +79,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const topSellingProducts = useMemo(() => {
     const counts: Record<string, { name: string; qty: number; total: number; foto: string }> = {};
     transactions.forEach((tx) => {
-      if (tx.status === 'Selesai') {
+      if (normalizeOrderStatus(tx.status) !== 'DIBATALKAN') {
         tx.items.forEach((item) => {
           if (!counts[item.nama_produk]) {
             const prod = products.find(
@@ -101,7 +109,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dStr = d.toISOString().split('T')[0];
-      const dayTxs = transactions.filter((tx) => tx.tanggal === dStr && tx.status === 'Selesai');
+      const dayTxs = transactions.filter(
+        (tx) => tx.tanggal === dStr && normalizeOrderStatus(tx.status) !== 'DIBATALKAN'
+      );
       const total = dayTxs.reduce((s, tx) => s + tx.total, 0);
       days.push({
         date: dStr,
@@ -133,8 +143,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <span>+ Transaksi Baru</span>
         </button>
         <button
+          onClick={() => onNavigate('orders')}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-stone-900 border border-amber-500/40 hover:bg-amber-950/40 text-amber-400 font-bold text-xs whitespace-nowrap active:scale-95 transition cursor-pointer"
+        >
+          <Receipt className="w-4 h-4" />
+          <span>Antrian Kasir</span>
+        </button>
+        <button
+          onClick={() => onNavigate('delivery_dqm')}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-stone-900 border border-teal-500/40 hover:bg-teal-950/40 text-teal-400 font-bold text-xs whitespace-nowrap active:scale-95 transition cursor-pointer"
+        >
+          <Bike className="w-4 h-4" />
+          <span>DELIVERY DQM</span>
+        </button>
+        <button
           onClick={() => onNavigate('whatsapp_order')}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-stone-900 border border-emerald-500/40 hover:bg-emerald-950/40 text-emerald-400 font-bold text-xs whitespace-nowrap active:scale-95 transition"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-stone-900 border border-emerald-500/40 hover:bg-emerald-950/40 text-emerald-400 font-bold text-xs whitespace-nowrap active:scale-95 transition cursor-pointer"
         >
           <MessageCircle className="w-4 h-4" />
           <span>+ Pesanan WhatsApp</span>
@@ -250,14 +274,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h4 className="text-sm font-extrabold text-stone-100">
-                QR Code Takeaway & Delivery Siap Pakai
+                QR MENU WARUNG BANG KOBRA (BUNGKUS &amp; DELIVERY DQM)
               </h4>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">
                 Tanpa Instal Aplikasi
               </span>
             </div>
             <p className="text-xs text-stone-400 mt-0.5">
-              Pelanggan cukup arahkan kamera HP ke QR Code untuk pesan Takeaway atau Delivery. Pesanan langsung masuk ke WhatsApp & Kasir!
+              Pelanggan cukup scan QR Menu untuk pesan BUNGKUS atau DELIVERY DQM (khusus area Pesantren DQM). Pesanan langsung masuk ke Antrian Kasir!
             </p>
           </div>
         </div>
@@ -450,11 +474,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       <Receipt className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-mono font-bold text-xs text-stone-200">
-                        {tx.id_transaksi}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono font-bold text-xs text-stone-200">
+                          {tx.id_transaksi}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-black border ${
+                            resolveOrderType(tx) === 'DELIVERY_DQM'
+                              ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
+                              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                          }`}
+                        >
+                          {resolveOrderType(tx) === 'DELIVERY_DQM' ? '[DELIVERY DQM]' : '[BUNGKUS]'}
+                        </span>
                       </div>
                       <div className="text-[11px] text-stone-400">
-                        {tx.nama_pelanggan || 'Pelanggan'} • {tx.jam}
+                        {tx.nama_pelanggan || 'Pelanggan'} • {tx.jam} • {getOrderStatusLabel(tx)}
                       </div>
                     </div>
                   </div>

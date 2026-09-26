@@ -34,6 +34,11 @@ import {
   WarungUser,
   UserRole,
 } from '../types';
+import {
+  normalizeOrderStatus,
+  normalizeDeliveryStatus,
+  resolveOrderType,
+} from '../utils/formatters';
 
 // Initialize Firebase App safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
@@ -357,32 +362,32 @@ export async function saveOrderToFirebase(order: Transaction): Promise<{ success
     }
     const orderDocRef = doc(db, 'orders', order.id_transaksi);
 
-    const isDeliveryDqm =
-      order.orderType === 'DELIVERY_DQM' ||
-      order.tipe_pesanan === 'DELIVERY_DQM' ||
-      order.tipe_pesanan === 'Delivery';
-
-    const resolvedOrderType: 'BUNGKUS' | 'DELIVERY_DQM' = isDeliveryDqm ? 'DELIVERY_DQM' : 'BUNGKUS';
+    const resolvedOrderType: 'BUNGKUS' | 'DELIVERY_DQM' = resolveOrderType(order);
+    const isDeliveryDqm = resolvedOrderType === 'DELIVERY_DQM';
+    const normalizedStatus = normalizeOrderStatus(order.status);
+    const normalizedDelivStatus = isDeliveryDqm
+      ? normalizeDeliveryStatus(order.deliveryStatus, normalizedStatus)
+      : null;
 
     // Sanitize data for Firestore according to strict Database Order rules:
     // For BUNGKUS: deliveryArea = null, deliveryLocation = null, deliveryDetail = null, deliveryFee = 0
     // For DELIVERY_DQM: deliveryArea = 'DQM', deliveryLocation, deliveryDetail, deliveryNote, deliveryFee, deliveryStatus
     const firestorePayload = {
-      id_transaksi: order.id_transaksi,
-      tanggal: order.tanggal,
-      jam: order.jam,
+      id_transaksi: String(order.id_transaksi || `WKB-${Date.now()}`).trim(),
+      tanggal: order.tanggal || new Date().toISOString().split('T')[0],
+      jam: order.jam || new Date().toTimeString().split(' ')[0],
       kasir: order.kasir || 'Online QR Customer',
       customerId: auth.currentUser?.uid || '',
-      nama_pelanggan: order.nama_pelanggan || 'Pelanggan',
+      nama_pelanggan: String(order.nama_pelanggan || 'Pelanggan').trim() || 'Pelanggan',
       no_whatsapp: order.no_whatsapp || '',
       subtotal: Number(order.subtotal || 0),
       diskon: Number(order.diskon || 0),
       biaya: isDeliveryDqm ? Number(order.deliveryFee ?? order.biaya ?? 0) : Number(order.biaya || 0),
-      total: Number(order.total || 0),
+      total: Math.max(0, Number(order.total || 0)),
       metode_pembayaran: order.metode_pembayaran || 'Cash',
       uang_diterima: Number(order.uang_diterima || 0),
       kembalian: Number(order.kembalian || 0),
-      status: order.status || 'MENUNGGU',
+      status: normalizedStatus,
       orderType: resolvedOrderType,
       tipe_pesanan: resolvedOrderType,
       deliveryArea: isDeliveryDqm ? 'DQM' : null,
@@ -390,7 +395,7 @@ export async function saveOrderToFirebase(order: Transaction): Promise<{ success
       deliveryDetail: isDeliveryDqm ? String(order.deliveryDetail || '') : null,
       deliveryNote: isDeliveryDqm ? String(order.deliveryNote || order.catatan_pesanan || '') : null,
       deliveryFee: isDeliveryDqm ? Number(order.deliveryFee ?? order.biaya ?? 0) : 0,
-      deliveryStatus: isDeliveryDqm ? (order.deliveryStatus || 'MENUNGGU') : null,
+      deliveryStatus: normalizedDelivStatus,
       alamat_pengantaran: isDeliveryDqm
         ? order.alamat_pengantaran || `Pesantren DQM - ${order.deliveryLocation || ''} ${order.deliveryDetail ? `(${order.deliveryDetail})` : ''}`.trim()
         : '',
@@ -479,11 +484,15 @@ export async function updateFirebaseOrderStatus(
 ): Promise<boolean> {
   const path = `orders/${orderId}`;
   try {
+    if (!auth.currentUser) {
+      await ensureFirebaseAuth();
+    }
+    const normalizedStatus = normalizeOrderStatus(newStatus);
     const orderDocRef = doc(db, 'orders', orderId);
     if (fullTransaction) {
       await saveOrderToFirebase({
         ...fullTransaction,
-        status: newStatus,
+        status: normalizedStatus,
         ...(newDeliveryStatus !== undefined ? { deliveryStatus: newDeliveryStatus } : {}),
       });
       return true;
@@ -492,7 +501,7 @@ export async function updateFirebaseOrderStatus(
       orderDocRef,
       {
         id_transaksi: orderId,
-        status: newStatus,
+        status: normalizedStatus,
         ...(newDeliveryStatus !== undefined ? { deliveryStatus: newDeliveryStatus } : {}),
         updated_at: new Date().toISOString(),
       },

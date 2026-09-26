@@ -85,7 +85,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const allFeatures: Array<{ id: ActiveTab; label: string; desc: string }> = [
     { id: 'dashboard', label: 'Ringkasan Dashboard', desc: 'Statistik omset harian, grafik penjualan & performa' },
     { id: 'pos', label: 'Kasir Penjualan (POS)', desc: 'Input transaksi kasir, keranjang menu, struk, dan pembayaran' },
-    { id: 'orders', label: 'Manajemen Pesanan', desc: 'Monitor pesanan Takeaway & Delivery dan pembaruan status' },
+    { id: 'orders', label: 'Antrian Kasir', desc: 'Monitor antrian pesanan [BUNGKUS] & [DELIVERY DQM]' },
+    { id: 'delivery_dqm', label: 'Dashboard Delivery DQM', desc: 'Pantau & ubah status pengantaran khusus area Pesantren DQM' },
     { id: 'whatsapp_order', label: 'Pesanan WhatsApp', desc: 'Generator format pesan otomatis dan follow-up WA' },
     { id: 'products', label: 'Katalog Menu & Harga', desc: 'Tambah/edit produk, upload foto, harga modal & jual' },
     { id: 'categories', label: 'Kelola Kategori', desc: 'Pengelompokan menu makanan, minuman, dan snack' },
@@ -93,9 +94,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     { id: 'customers', label: 'Data Pelanggan', desc: 'Riwayat transaksi langganan dan kontak WhatsApp' },
     { id: 'expenses', label: 'Catatan Pengeluaran', desc: 'Buku kas operasional, belanja bahan, dan biaya harian' },
     { id: 'reports', label: 'Laporan Laba Rugi', desc: 'Analisis laba bersih, omset bulanan, dan ekspor data' },
-    { id: 'users', label: 'Manajemen Pengguna (RBAC)', desc: 'Pengaturan akun kasir, admin, staf, dan PIN akses' },
-    { id: 'qrcode_order', label: 'QR Code Self-Order', desc: 'Pemesanan mandiri via scan HP dan cetak standee meja/kasir' },
-    { id: 'settings', label: 'Pengaturan Warung', desc: 'Data toko, format struk, koneksi Sheets & Cloud Firestore' },
+    { id: 'users', label: 'Manajemen Pengguna (RBAC)', desc: 'Pengaturan akun kasir, admin, staf, delivery, dan PIN akses' },
+    { id: 'qrcode_order', label: 'QR Menu Warung Bang Kobra', desc: 'Pemesanan mandiri via scan HP untuk BUNGKUS & DELIVERY DQM' },
+    { id: 'settings', label: 'Pengaturan Warung', desc: 'Data toko, biaya Delivery DQM, koneksi Sheets & Cloud Firestore' },
     { id: 'ai_bot', label: 'Asisten AI KobraBot', desc: 'Konsultasi cerdas analisis bisnis & strategi menu' },
   ];
 
