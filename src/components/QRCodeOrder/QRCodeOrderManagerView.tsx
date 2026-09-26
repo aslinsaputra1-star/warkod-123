@@ -105,24 +105,24 @@ export const QRCodeOrderManagerView: React.FC<QRCodeOrderManagerViewProps> = ({
   // Titles based on selected target
   const targetMeta = {
     takeaway: {
-      badge: 'TAKEAWAY / BUNGKUS',
+      badge: 'QR MENU WARUNG BANG KOBRA • [BUNGKUS]',
       icon: ShoppingBag,
-      title: 'PESAN TAKEAWAY TANPA ANTRE',
-      sub: 'Arahkan Kamera HP ke QR Code, Pilih Menu, Ambil di Kasir Saat Matang!',
+      title: 'QR MENU WARUNG BANG KOBRA',
+      sub: 'Scan QR → Buka Menu → Checkout → Pilih BUNGKUS (Pesanan disiapkan untuk diambil)',
       color: 'from-amber-500 to-orange-500',
     },
     delivery: {
-      badge: 'PESAN ANTAR / DELIVERY',
+      badge: 'QR MENU WARUNG BANG KOBRA • [DELIVERY DQM]',
       icon: Bike,
-      title: 'PESAN ANTAR KE RUMAH / KANTOR',
-      sub: 'Scan QR Code Sekarang! Makanan Hangat Diantar Langsung ke Alamat Anda.',
+      title: 'QR MENU WARUNG BANG KOBRA',
+      sub: 'Scan QR → Buka Menu → Checkout → Pilih DELIVERY DQM (Khusus Area Pesantren DQM)',
       color: 'from-orange-500 to-rose-500',
     },
     menu: {
-      badge: 'MENU DIGITAL RESMI',
+      badge: 'QR MENU WARUNG BANG KOBRA',
       icon: Store,
-      title: 'MENU DIGITAL WARUNG',
-      sub: 'Scan QR Code Untuk Buka Menu Lengkap, Pilih Takeaway atau Delivery Bebas!',
+      title: 'QR MENU WARUNG BANG KOBRA',
+      sub: 'Scan QR → Buka Menu → Checkout → Pilih BUNGKUS atau DELIVERY DQM',
       color: 'from-amber-500 to-amber-600',
     },
   }[selectedTarget];
@@ -137,14 +137,13 @@ export const QRCodeOrderManagerView: React.FC<QRCodeOrderManagerViewProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 text-amber-400 font-extrabold text-xs tracking-wider uppercase">
               <QrCode className="w-4 h-4" />
-              <span>QR Code Menu Mandiri Pelanggan</span>
+              <span>QR MENU WARUNG BANG KOBRA</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-stone-100">
-              QR Code Takeaway & Delivery Order
+              QR Menu Warung Bang Kobra (BUNGKUS &amp; DELIVERY DQM)
             </h2>
             <p className="text-xs sm:text-sm text-stone-400 max-w-2xl leading-relaxed">
-              Pelanggan cukup mengarahkan kamera HP ke QR Code tanpa instal aplikasi.
-              Pesan mandiri langsung terbuka di browser HP pelanggan dan terkirim otomatis ke WhatsApp Warung!
+              QR Code digunakan khusus untuk membuka menu dan melakukan pesanan (BUNGKUS atau DELIVERY DQM). Warung Bang Kobra tidak menggunakan sistem meja/dine-in.
             </p>
           </div>
 
@@ -156,7 +155,7 @@ export const QRCodeOrderManagerView: React.FC<QRCodeOrderManagerViewProps> = ({
             className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-stone-950 font-black text-xs shadow-lg shadow-amber-950/40 transition active:scale-95 shrink-0 cursor-pointer"
           >
             <Smartphone className="w-4 h-4" />
-            <span>Coba Tampilan di HP Pelanggan</span>
+            <span>Buka Simulasi Menu Pelanggan</span>
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -169,10 +168,44 @@ export const QRCodeOrderManagerView: React.FC<QRCodeOrderManagerViewProps> = ({
           {/* Target Type Selector */}
           <div className="bg-stone-900 border border-stone-800 rounded-3xl p-5 shadow-xl space-y-3">
             <label className="text-xs font-bold text-stone-300 block">
-              1. Pilih Tujuan QR Code:
+              1. Pilih Mode QR Menu Warung Bang Kobra:
             </label>
 
             <div className="grid grid-cols-1 gap-2.5">
+              <button
+                type="button"
+                id="tab-qr-menu"
+                onClick={() => setSelectedTarget('menu')}
+                className={`p-3.5 rounded-2xl border text-left transition flex items-start gap-3 cursor-pointer ${
+                  selectedTarget === 'menu'
+                    ? 'bg-amber-500/15 border-amber-500/60 shadow-lg shadow-amber-950/30'
+                    : 'bg-stone-950 border-stone-800 hover:bg-stone-850'
+                }`}
+              >
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    selectedTarget === 'menu'
+                      ? 'bg-amber-500 text-stone-950 font-bold'
+                      : 'bg-stone-800 text-stone-400'
+                  }`}
+                >
+                  <Store className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-sm text-stone-100">
+                      QR MENU WARUNG BANG KOBRA (Utama)
+                    </span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-amber-500/20 text-amber-400 rounded">
+                      Utama
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-400 mt-0.5">
+                    Customer scan QR → buka menu → checkout → pilih BUNGKUS atau DELIVERY DQM.
+                  </p>
+                </div>
+              </button>
+
               <button
                 type="button"
                 id="tab-qr-takeaway"
@@ -193,16 +226,11 @@ export const QRCodeOrderManagerView: React.FC<QRCodeOrderManagerViewProps> = ({
                   <ShoppingBag className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-sm text-stone-100">
-                      QR Code Takeaway (Bungkus)
-                    </span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 bg-amber-500/20 text-amber-400 rounded">
-                      Populer
-                    </span>
-                  </div>
+                  <span className="font-extrabold text-sm text-stone-100">
+                    QR Khusus Pesanan [BUNGKUS]
+                  </span>
                   <p className="text-[11px] text-stone-400 mt-0.5">
-                    Khusus pelanggan yang ingin membungkus makanan tanpa antre di depan kasir.
+                    Langsung mengarahkan pilihan pesanan ke BUNGKUS (disiapkan untuk diambil).
                   </p>
                 </div>
               </button>
@@ -228,39 +256,10 @@ export const QRCodeOrderManagerView: React.FC<QRCodeOrderManagerViewProps> = ({
                 </div>
                 <div>
                   <span className="font-extrabold text-sm text-stone-100">
-                    QR Code Delivery (Pesan Antar)
+                    QR Khusus [DELIVERY DQM]
                   </span>
                   <p className="text-[11px] text-stone-400 mt-0.5">
-                    Untuk stiker kemasan atau brosur agar pelanggan pesan antar dari rumah/kantor.
-                  </p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                id="tab-qr-menu"
-                onClick={() => setSelectedTarget('menu')}
-                className={`p-3.5 rounded-2xl border text-left transition flex items-start gap-3 cursor-pointer ${
-                  selectedTarget === 'menu'
-                    ? 'bg-amber-500/15 border-amber-500/60 shadow-lg shadow-amber-950/30'
-                    : 'bg-stone-950 border-stone-800 hover:bg-stone-850'
-                }`}
-              >
-                <div
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                    selectedTarget === 'menu'
-                      ? 'bg-amber-500 text-stone-950 font-bold'
-                      : 'bg-stone-800 text-stone-400'
-                  }`}
-                >
-                  <Store className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="font-extrabold text-sm text-stone-100">
-                    QR Code Menu Gabungan
-                  </span>
-                  <p className="text-[11px] text-stone-400 mt-0.5">
-                    Pelanggan dapat memilih opsi Takeaway atau Delivery sesuka hati.
+                    Langsung mengarahkan pilihan ke DELIVERY DQM (khusus area Pesantren DQM).
                   </p>
                 </div>
               </button>
@@ -518,7 +517,7 @@ export const QRCodeOrderManagerView: React.FC<QRCodeOrderManagerViewProps> = ({
               <div className="pt-2 border-t border-stone-300 w-full text-center space-y-0.5">
                 <p className="text-xs font-bold text-stone-900">{customNote}</p>
                 <p className="text-[10px] text-stone-600">
-                  WhatsApp Warung: <strong>{settings.whatsappNumber || '0812-XXXX-XXXX'}</strong> • {settings.storeAddress || 'Warung Bang Kobra'}
+                  WhatsApp Warung: <strong>{settings.whatsappNumber || '0812-XXXX-XXXX'}</strong> • {settings.address || settings.storeAddress || 'Warung Bang Kobra'}
                 </p>
               </div>
             </div>

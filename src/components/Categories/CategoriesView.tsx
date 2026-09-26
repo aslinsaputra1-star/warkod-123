@@ -131,15 +131,23 @@ export const CategoriesView: React.FC<CategoriesViewProps> = ({
       return;
     }
 
-    if (window.confirm(`Hapus kategori "${cat.nama}"?`)) {
-      if (onDeleteCategory) {
-        onDeleteCategory(cat.id);
-      } else {
-        const updated = StorageService.deleteCategory(cat.id);
-        setLocalCategories(updated);
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm(`Hapus kategori "${cat.nama}"?`)) {
+          return;
+        }
       }
-      showToast(`Kategori "${cat.nama}" berhasil dihapus`, 'info');
+    } catch {
+      // Continue if window.confirm is restricted
     }
+
+    if (onDeleteCategory) {
+      onDeleteCategory(cat.id);
+    } else {
+      const updated = StorageService.deleteCategory(cat.id);
+      setLocalCategories(updated);
+    }
+    showToast(`Kategori "${cat.nama}" berhasil dihapus`, 'info');
   };
 
   const getCategoryIcon = (nama: string) => {

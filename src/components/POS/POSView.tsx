@@ -128,9 +128,16 @@ export const POSView: React.FC<POSViewProps> = ({
 
   const clearCart = () => {
     if (cart.length === 0) return;
-    if (window.confirm('Kosongkan semua item di keranjang belanja?')) {
-      setCart([]);
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm('Kosongkan semua item di keranjang belanja?')) {
+          return;
+        }
+      }
+    } catch {
+      // Continue if window.confirm is restricted
     }
+    setCart([]);
   };
 
   const openNoteEditor = (index: number) => {
@@ -154,6 +161,12 @@ export const POSView: React.FC<POSViewProps> = ({
 
   const handleCompletePayment = (data: {
     method: any;
+    orderType?: 'BUNGKUS' | 'DELIVERY_DQM';
+    deliveryArea?: 'DQM' | null;
+    deliveryLocation?: string | null;
+    deliveryDetail?: string | null;
+    deliveryNote?: string | null;
+    deliveryFee?: number;
     subtotal: number;
     diskon: number;
     biaya: number;
@@ -165,6 +178,8 @@ export const POSView: React.FC<POSViewProps> = ({
   }) => {
     const now = new Date();
     const invoiceNumber = StorageService.generateInvoiceNumber(settings.invoicePrefix || 'WKB');
+    const resolvedOrderType = data.orderType || 'BUNGKUS';
+    const isDelivery = resolvedOrderType === 'DELIVERY_DQM';
 
     const transaction: Transaction = {
       id_transaksi: invoiceNumber,
@@ -175,13 +190,24 @@ export const POSView: React.FC<POSViewProps> = ({
       no_whatsapp: data.noWhatsapp,
       subtotal: data.subtotal,
       diskon: data.diskon,
-      biaya: data.biaya,
+      biaya: isDelivery ? Number(data.deliveryFee || 0) : 0,
       total: data.total,
       metode_pembayaran: data.method,
       uang_diterima: data.uangDiterima,
       kembalian: data.kembalian,
-      status: 'Selesai',
-      tipe_pesanan: 'Takeaway',
+      status: 'MENUNGGU',
+      orderType: resolvedOrderType,
+      tipe_pesanan: resolvedOrderType,
+      deliveryArea: isDelivery ? 'DQM' : null,
+      deliveryLocation: isDelivery ? (data.deliveryLocation || '') : null,
+      deliveryDetail: isDelivery ? (data.deliveryDetail || '') : null,
+      deliveryNote: isDelivery ? (data.deliveryNote || '') : null,
+      deliveryFee: isDelivery ? Number(data.deliveryFee || 0) : 0,
+      deliveryStatus: isDelivery ? 'MENUNGGU' : null,
+      alamat_pengantaran: isDelivery
+        ? `Pesantren DQM - ${data.deliveryLocation || ''} (${data.deliveryDetail || ''})`
+        : '',
+      catatan_pesanan: data.deliveryNote || '',
       created_at: now.toISOString(),
       items: cart.map((c, i) => ({
         id_detail: `DTL-${invoiceNumber}-${i + 1}`,
@@ -258,8 +284,8 @@ export const POSView: React.FC<POSViewProps> = ({
                   onClick={() => setSelectedCategory(cat)}
                   className={`min-h-[40px] px-4 py-2 rounded-2xl whitespace-nowrap transition-all border-2 cursor-pointer ${
                     isSelected
-                      ? 'bg-red-600 text-white font-black border-red-500 shadow-md shadow-red-950/50'
-                      : 'bg-stone-900 text-stone-300 border-stone-800 hover:bg-stone-800'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 font-black border-amber-400 shadow-md shadow-amber-950/40'
+                      : 'bg-stone-900 text-stone-300 border-stone-800 hover:bg-stone-850 hover:text-white'
                   }`}
                 >
                   {cat}
@@ -290,7 +316,7 @@ export const POSView: React.FC<POSViewProps> = ({
                   className={`group relative bg-stone-900 border-2 rounded-2xl p-2.5 sm:p-3 flex flex-col justify-between transition-all select-none ${
                     isOutOfStock
                       ? 'opacity-60 border-stone-800 cursor-not-allowed'
-                      : 'border-stone-800 hover:border-red-600/60 hover:shadow-xl hover:shadow-red-950/30 cursor-pointer active:scale-[0.98]'
+                      : 'border-stone-800 hover:border-amber-500/60 hover:shadow-xl hover:shadow-amber-950/30 cursor-pointer active:scale-[0.98]'
                   }`}
                 >
                   {/* Photo Container */}
@@ -495,7 +521,7 @@ export const POSView: React.FC<POSViewProps> = ({
             id="btn-pos-pay"
             disabled={cart.length === 0}
             onClick={() => setIsPaymentModalOpen(true)}
-            className="w-full min-h-[52px] py-4 px-4 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-base transition shadow-xl shadow-red-950/60 border border-red-500/50 flex items-center justify-center gap-2 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="w-full min-h-[52px] py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-base transition shadow-xl shadow-emerald-950/60 border border-emerald-500/50 flex items-center justify-center gap-2 active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
             <CreditCard className="w-5 h-5" />
             <span>Bayar ({formatRupiah(cartSubtotal)})</span>
@@ -506,12 +532,12 @@ export const POSView: React.FC<POSViewProps> = ({
       {/* MOBILE FLOATING CART BAR (Always accessible on touchscreens above bottom nav) */}
       {cart.length > 0 && (
         <div className="lg:hidden fixed bottom-16 left-2 right-2 sm:left-4 sm:right-4 z-30">
-          <div className="bg-stone-950 border-2 border-red-600 rounded-2xl p-3 text-white shadow-2xl shadow-red-950/80 flex items-center justify-between">
+          <div className="bg-stone-950 border-2 border-amber-500/60 rounded-2xl p-3 text-white shadow-2xl shadow-amber-950/80 flex items-center justify-between">
             <div
               className="flex-1 flex items-center gap-2.5 cursor-pointer"
               onClick={() => setMobileCartOpen(true)}
             >
-              <div className="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center font-black text-base shadow">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center font-black text-base shadow">
                 {cartTotalItems}
               </div>
               <div>
@@ -530,7 +556,7 @@ export const POSView: React.FC<POSViewProps> = ({
               <button
                 id="btn-mobile-checkout"
                 onClick={() => setIsPaymentModalOpen(true)}
-                className="min-h-[40px] px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-xs shadow-lg border border-red-400/50 active:scale-95 cursor-pointer"
+                className="min-h-[40px] px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg border border-emerald-400/50 active:scale-95 cursor-pointer"
               >
                 Bayar
               </button>
@@ -624,9 +650,9 @@ export const POSView: React.FC<POSViewProps> = ({
                   setMobileCartOpen(false);
                   setIsPaymentModalOpen(true);
                 }}
-                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 text-white font-extrabold text-sm shadow-lg shadow-amber-900/30"
+                className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm shadow-lg shadow-emerald-950/40 cursor-pointer active:scale-98"
               >
-                Lanjut ke Pembayaran
+                Lanjut ke Pembayaran ({formatRupiah(cartSubtotal)})
               </button>
             </div>
           </div>

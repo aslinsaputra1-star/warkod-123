@@ -346,6 +346,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   storeName: 'WARUNG BANG KOBRA',
   tagline: 'POS & ORDER MANAGEMENT',
   address: 'Jl. Raya Kuliner No. 88, Samping Kampus / Pasar Malam',
+  storeAddress: 'Jl. Raya Kuliner No. 88, Samping Kampus / Pasar Malam',
   whatsappNumber: '6281234567890', // User can update this anytime in Settings
   logoUrl: '/icon.svg',
   receiptFooter: 'Matur Suwun / Terima kasih sudah membeli di WARUNG BANG KOBRA 🙏',
@@ -365,6 +366,20 @@ export const INITIAL_SETTINGS: StoreSettings = {
   onlineMenuHours: '09:00 - 22:00 WIB',
   onlineMenuBankInfo: 'BCA 8830192831 a.n Warung Bang Kobra',
   onlineMenuIsOpen: true,
+  onlineMenuAnnouncement: '📢 PENGUMUMAN SPESIAL: Layanan Pesanan Warung Bang Kobra tersedia untuk BUNGKUS (Ambil di Warung) dan DELIVERY KHUSUS PESANTREN DQM!',
+  deliveryDqmEnabled: true,
+  deliveryFeeType: 'FREE',
+  deliveryFeeAmount: 2000,
+  deliveryDqmNote: 'Delivery hanya tersedia di area Pesantren DQM (Asrama Putra, Asrama Putri, Gedung Sekolah, Kantor, & Komplek DQM).',
+  menuAdActive: true,
+  menuAdTitle: 'Paket Mi Rendang Kobra Spesial + Es Teh Manis',
+  menuAdText: 'Cita rasa bumbu rendang rempah pekat berpadu mi kenyal khas Bang Kobra. Pesan sekarang hemat 15%!',
+  menuAdBadge: 'PROMO HARI INI',
+  menuAdDiscountPercent: 15,
+  menuAdTargetCategory: 'Makanan',
+  menuAdButtonText: 'Pesan Menu Promo Ini',
+  menuAdTheme: 'fire',
+  menuAdImageUrl: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80',
 };
 
 export const INITIAL_CUSTOMERS: Customer[] = [
@@ -436,7 +451,13 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     metode_pembayaran: 'Cash',
     uang_diterima: 50000,
     kembalian: 10000,
-    status: 'Selesai',
+    status: 'SELESAI',
+    orderType: 'BUNGKUS',
+    tipe_pesanan: 'BUNGKUS',
+    deliveryArea: null,
+    deliveryLocation: null,
+    deliveryDetail: null,
+    deliveryFee: 0,
     items: [
       {
         id_detail: 'DTL-001-1',
@@ -474,8 +495,8 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     id_transaksi: 'WKB-20260907-002',
     tanggal: '2026-09-07',
     jam: '10:30:00',
-    kasir: 'Budi Kasir',
-    nama_pelanggan: 'Rian Prasetyo',
+    kasir: 'Online QR Customer',
+    nama_pelanggan: 'Ahmad',
     no_whatsapp: '087811223344',
     subtotal: 48000,
     diskon: 0,
@@ -484,7 +505,17 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     metode_pembayaran: 'QRIS',
     uang_diterima: 48000,
     kembalian: 0,
-    status: 'Selesai',
+    status: 'DIPROSES',
+    orderType: 'DELIVERY_DQM',
+    tipe_pesanan: 'DELIVERY_DQM',
+    deliveryArea: 'DQM',
+    deliveryLocation: 'Asrama Putra',
+    deliveryDetail: 'Kamar 12',
+    deliveryNote: 'Antar setelah Maghrib',
+    deliveryFee: 0,
+    deliveryStatus: 'SIAP DIANTAR',
+    alamat_pengantaran: 'Pesantren DQM - Asrama Putra (Kamar 12)',
+    catatan_pesanan: 'Antar setelah Maghrib',
     items: [
       {
         id_detail: 'DTL-002-1',
@@ -554,7 +585,7 @@ export const INITIAL_USERS: Array<{
   nama: string;
   username: string;
   email?: string;
-  role: 'Owner' | 'Admin' | 'Kasir' | 'Staff' | 'Customer';
+  role: 'Owner' | 'Admin' | 'Kasir' | 'Staff' | 'Delivery' | 'Customer';
   pin: string;
   no_hp?: string;
   avatar_url?: string;
@@ -638,6 +669,21 @@ export const INITIAL_USERS: Array<{
     total_omset: 680000,
     terakhir_aktif: 'Kemarin, 21:00',
     created_at: '2026-04-10T08:00:00Z',
+  },
+  {
+    id: 'USR-DELIVERY',
+    nama: 'Kang Fauzi (Petugas Delivery DQM)',
+    username: 'delivery',
+    email: 'fauzi.delivery@warungkobra.com',
+    role: 'Delivery',
+    pin: '2222',
+    no_hp: '0856-7788-9900',
+    avatar_url: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
+    status: 'Aktif',
+    total_transaksi: 64,
+    total_omset: 1850000,
+    terakhir_aktif: 'Hari ini, 16:45',
+    created_at: '2026-05-01T08:00:00Z',
   },
   {
     id: 'USR-005',

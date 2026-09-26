@@ -18,6 +18,7 @@ import {
   LogOut,
   LogIn,
   ShoppingBag,
+  Lock,
 } from 'lucide-react';
 import { StoreSettings, SyncState, UserRole, WarungUser } from '../types';
 import { normalizeRole, getRoleBadgeInfo, ROLE_CONFIGS, NormalizedRole } from '../utils/rbac';
@@ -41,6 +42,7 @@ interface HeaderProps {
   onOpenAIBot?: () => void;
   onOpenLogoEditor?: () => void;
   onOpenCustomerView?: () => void;
+  onLockApp?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -58,6 +60,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAIBot,
   onOpenLogoEditor,
   onOpenCustomerView,
+  onLockApp,
 }) => {
 
   const currentRole = currentUser ? normalizeRole(currentUser.role) : normalizeRole(settings.role);
@@ -72,7 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const availableRoles: NormalizedRole[] = ['Owner', 'Admin', 'Kasir', 'Staff', 'Customer'];
+  const availableRoles: NormalizedRole[] = ['Owner', 'Admin', 'Kasir', 'Staff', 'Delivery', 'Customer'];
 
   return (
     <header className="sticky top-0 z-40 bg-stone-950/98 border-b-2 border-stone-800 backdrop-blur-md px-3 sm:px-6 py-2 transition-colors">
@@ -113,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
               <h1 className="font-black tracking-tight text-sm sm:text-base md:text-lg text-white leading-none">
                 {settings.storeName || 'WARUNG BANG KOBRA'}
               </h1>
-              <span className="hidden sm:inline-block px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase bg-red-600/30 text-red-400 border border-red-600/40">
+              <span className="hidden sm:inline-block px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase bg-amber-500/15 text-amber-400 border border-amber-500/30">
                 POS
               </span>
               {onOpenLogoEditor && (
@@ -260,6 +263,19 @@ export const Header: React.FC<HeaderProps> = ({
                   </span>
                 </button>
 
+                {onLockApp && (
+                  <button
+                    type="button"
+                    id="btn-header-lock-app"
+                    onClick={onLockApp}
+                    title="Kunci Layar Aplikasi POS (Amankan POS)"
+                    className="min-h-[40px] px-2.5 rounded-xl bg-stone-900 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-stone-800 hover:border-amber-700/50 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline text-[11px] font-extrabold">Kunci</span>
+                  </button>
+                )}
+
                 {onLogout && (
                   <button
                     type="button"
@@ -284,7 +300,7 @@ export const Header: React.FC<HeaderProps> = ({
                     onOpenLogin();
                   }
                 }}
-                className="min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-950/50 transition cursor-pointer"
+                className="min-h-[40px] flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-md shadow-amber-950/50 transition cursor-pointer"
               >
                 <LogIn className="w-4 h-4" />
                 <span>Masuk Staf</span>

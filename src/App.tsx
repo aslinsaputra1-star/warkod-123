@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StoreSettings,
   ActiveTab,
@@ -36,6 +36,7 @@ import { PublicMenuManagerView } from './components/PublicMenu/PublicMenuManager
 import { CategoriesView } from './components/Categories/CategoriesView';
 import { UsersManagementView } from './components/Users/UsersManagementView';
 import { OrdersManagementView } from './components/Orders/OrdersManagementView';
+import { DeliveryDQMDashboard } from './components/Orders/DeliveryDQMDashboard';
 import { ProtectedRoute } from './components/Auth/ProtectedRoute';
 import { LoginModal } from './components/Auth/LoginModal';
 import { LoginView } from './components/Auth/LoginView';
@@ -61,6 +62,9 @@ import {
   subscribeToFirebaseCustomers,
   saveSettingsToFirebase,
   subscribeToFirebaseSettings,
+  subscribeToFirebaseUsers,
+  subscribeToFirebaseStockMutations,
+  saveStockMutationToFirebase,
   subscribeToAuthState,
 } from './services/firebase';
 import { formatRupiah } from './utils/formatters';
@@ -167,25 +171,40 @@ export default function App() {
   // User Authentication State & RBAC
   const [currentUser, setCurrentUser] = useState<WarungUser | null>(() => {
     const saved = StorageService.getAuthUser();
-    // Only restore session if authenticated with an authorized internal staff role
-    if (saved && ['Owner', 'Admin', 'Kasir', 'Staff'].includes(saved.role)) {
+    // 1. If existing authenticated staff session exists, restore it
+    if (
+      saved &&
+      ['Owner', 'Admin', 'Kasir', 'Staff', 'Delivery', 'ADMIN', 'KASIR', 'DELIVERY'].includes(
+        saved.role
+      )
+    ) {
       return saved;
     }
-    // Unauthenticated visitors/customers default to null (Customer Layout)
-    return null;
-  });
-  const [isStaffLoginMode, setIsStaffLoginMode] = useState<boolean>(() => {
+    // 2. If the user explicitly navigated to public customer menu via URL, allow customer view
     if (typeof window !== 'undefined') {
       const search = window.location.search;
-      return (
-        search.includes('staff=true') ||
-        search.includes('login=true') ||
-        search.includes('portal=staff') ||
-        search.includes('admin=true')
-      );
+      if (
+        search.includes('menu=') ||
+        search.includes('mode=public') ||
+        search.includes('order=') ||
+        search.includes('scan=')
+      ) {
+        return null;
+      }
     }
-    return false;
+    // 3. Default to the primary Owner account (Rayyan) for the Warung Bang Kobra POS system
+    const users = StorageService.getUsers();
+    const owner =
+      users.find((u) => u.email?.toLowerCase() === 'rayyanarasid549@gmail.com') ||
+      users.find((u) => u.role === 'Owner') ||
+      users[0];
+    if (owner) {
+      StorageService.setAuthUser(owner);
+      return owner;
+    }
+    return null;
   });
+  const [isStaffLoginMode, setIsStaffLoginMode] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
@@ -214,6 +233,8 @@ export default function App() {
     },
     []
   );
+
+  const isInitialOrdersLoad = useRef(true);
 
   // Real-time Cloud Database Synchronization across all devices (Firebase Firestore)
   useEffect(() => {
@@ -245,7 +266,8 @@ export default function App() {
 
     // 3. Subscribe to Orders in real-time
     const unsubscribeOrders = subscribeToFirebaseOrders((incomingOrders) => {
-      if (!incomingOrders || incomingOrders.length === 0) {
+      if (!incomingOrders) return;
+      if (incomingOrders.length === 0) {
         const localOrders = StorageService.getTransactions();
         if (localOrders.length > 0) {
           localOrders.forEach((order) => {
@@ -256,7 +278,7 @@ export default function App() {
       }
 
       setTransactions((prevTxList) => {
-        if (prevTxList.length > 0) {
+        if (!isInitialOrdersLoad.current && prevTxList.length > 0) {
           const existingIds = new Set(prevTxList.map((t) => t.id_transaksi));
           const newOrders = incomingOrders.filter((io) => !existingIds.has(io.id_transaksi));
           if (newOrders.length > 0) {
@@ -264,11 +286,12 @@ export default function App() {
             const latestOrder = newOrders[0];
             setNewOrderAlert(latestOrder);
             showToast(
-              `🔔 PESANAN BARU DARI QR! ${latestOrder.nama_pelanggan} (${latestOrder.tipe_pesanan || 'Takeaway'}) - Total: ${formatRupiah(latestOrder.total)}`,
+              `🔔 PESANAN BARU MASUK KE ANTRIAN KASIR! ${latestOrder.nama_pelanggan} [${latestOrder.orderType === 'DELIVERY_DQM' || latestOrder.tipe_pesanan === 'DELIVERY_DQM' ? 'DELIVERY DQM' : 'BUNGKUS'}] - Total: ${formatRupiah(latestOrder.total)}`,
               'success'
             );
           }
         }
+        isInitialOrdersLoad.current = false;
         StorageService.saveTransactions(incomingOrders);
         return incomingOrders;
       });
@@ -300,11 +323,42 @@ export default function App() {
       }
     });
 
-    // 6. Subscribe to Store Settings in real-time
+    // 6. Subscribe to Store Settings in real-time (Ensuring store address syncs identically across devices)
     const unsubscribeSettings = subscribeToFirebaseSettings((remoteSettings) => {
       if (remoteSettings && Object.keys(remoteSettings).length > 0) {
         setSettings((prev) => {
-          const merged = { ...prev, ...remoteSettings };
+          const hasRemoteAddr = remoteSettings.address !== undefined || remoteSettings.storeAddress !== undefined;
+          const remoteAddr = remoteSettings.address !== undefined ? remoteSettings.address : remoteSettings.storeAddress;
+          const finalAddr = hasRemoteAddr ? String(remoteAddr || '').trim() : String(prev.address || prev.storeAddress || '').trim();
+
+          const merged: StoreSettings = {
+            ...prev,
+            ...remoteSettings,
+            address: finalAddr,
+            storeAddress: finalAddr,
+          };
+
+          // Guard against unnecessary state updates if nothing actually changed
+          if (
+            prev.address === merged.address &&
+            prev.storeAddress === merged.storeAddress &&
+            prev.storeName === merged.storeName &&
+            prev.tagline === merged.tagline &&
+            prev.whatsappNumber === merged.whatsappNumber &&
+            prev.logoUrl === merged.logoUrl &&
+            prev.receiptFooter === merged.receiptFooter &&
+            prev.receiptPaperSize === merged.receiptPaperSize &&
+            prev.taxPercent === merged.taxPercent &&
+            prev.currency === merged.currency &&
+            prev.qrisImageUrl === merged.qrisImageUrl &&
+            prev.onlineMenuIsOpen === merged.onlineMenuIsOpen &&
+            prev.onlineMenuAnnouncement === merged.onlineMenuAnnouncement &&
+            prev.onlineMenuMinOrder === merged.onlineMenuMinOrder &&
+            prev.activeCashier === merged.activeCashier
+          ) {
+            return prev;
+          }
+
           StorageService.saveSettings(merged);
           return merged;
         });
@@ -316,7 +370,30 @@ export default function App() {
       }
     });
 
-    // 7. Subscribe to Auth State
+    // 7. Subscribe to Registered Users in real-time
+    const unsubscribeUsers = subscribeToFirebaseUsers((remoteUsers) => {
+      if (remoteUsers && remoteUsers.length > 0) {
+        const currentUsers = StorageService.getUsers();
+        const merged = remoteUsers.map((ru) => {
+          const matched = currentUsers.find((cu) => cu.id === ru.id || cu.username === ru.username);
+          return {
+            ...ru,
+            pin: matched?.pin || ru.pin || '1234',
+          };
+        });
+        StorageService.saveUsers(merged);
+      }
+    });
+
+    // 8. Subscribe to Stock Mutations in real-time
+    const unsubscribeMutations = subscribeToFirebaseStockMutations((remoteMutations) => {
+      if (remoteMutations && remoteMutations.length > 0) {
+        setMutations(remoteMutations);
+        StorageService.saveStockMutations(remoteMutations);
+      }
+    });
+
+    // 9. Subscribe to Auth State
     const unsubAuth = subscribeToAuthState((user) => {
       if (user) {
         console.log('Firebase user session ready:', user.uid);
@@ -330,6 +407,8 @@ export default function App() {
       unsubscribeExpenses();
       unsubscribeCustomers();
       unsubscribeSettings();
+      unsubscribeUsers();
+      unsubscribeMutations();
       unsubAuth();
     };
   }, []);
@@ -526,6 +605,12 @@ export default function App() {
     // Sync updated stock to Firebase so other devices immediately reflect decreased stock
     syncProductsToFirebase(updatedProds).catch(() => {});
 
+    // Sync latest stock mutation to Firebase
+    const latestMutations = StorageService.getStockMutations();
+    if (latestMutations.length > 0) {
+      saveStockMutationToFirebase(latestMutations[0]).catch(() => {});
+    }
+
     // Sync customer update to Firebase if applicable
     if (newTx.nama_pelanggan) {
       const cust = updatedCusts.find((c) => c.nama === newTx.nama_pelanggan);
@@ -548,14 +633,31 @@ export default function App() {
     StorageService.saveTransactions(updated);
     setTransactions(updated);
 
-    // Sync status change to Firebase Firestore (KASIR UPDATE STATUS -> FIREBASE -> CUSTOMER LIVE)
+    // Sync status change to Firebase Firestore (KASIR / DELIVERY UPDATE STATUS -> FIREBASE -> CUSTOMER LIVE)
     updateFirebaseOrderStatus(
       updatedTx.id_transaksi,
-      updatedTx.status as 'Pending' | 'Diproses' | 'Selesai' | 'Dibatalkan',
-      updatedTx
+      updatedTx.status,
+      updatedTx,
+      updatedTx.deliveryStatus
     ).catch((err) => {
       console.warn('Firebase status update error:', err);
     });
+  };
+
+  const handleUpdateDeliveryStatus = (
+    txId: string,
+    newDeliveryStatus: Transaction['deliveryStatus'],
+    mappedOrderStatus: Transaction['status']
+  ) => {
+    const current = StorageService.getTransactions();
+    const target = current.find((t) => t.id_transaksi === txId);
+    if (!target) return;
+    const updatedTx: Transaction = {
+      ...target,
+      status: mappedOrderStatus,
+      deliveryStatus: newDeliveryStatus,
+    };
+    handleUpdateTransaction(updatedTx);
   };
 
   // Product CRUD
@@ -589,6 +691,9 @@ export default function App() {
     setProducts(prods);
     setMutations(muts);
     syncProductsToFirebase(prods).catch(() => {});
+    if (muts && muts.length > 0) {
+      saveStockMutationToFirebase(muts[0]).catch(() => {});
+    }
   };
 
   // Categories CRUD
@@ -646,10 +751,33 @@ export default function App() {
   };
 
   // Save Settings
-  const handleSaveSettings = (newSettings: StoreSettings) => {
-    setSettings(newSettings);
-    StorageService.saveSettings(newSettings);
-    saveSettingsToFirebase(newSettings).catch(() => {});
+  const handleSaveSettings = async (newSettings: StoreSettings): Promise<boolean> => {
+    // Treat store address as a core persistent field
+    const rawAddr = newSettings.address !== undefined ? newSettings.address : newSettings.storeAddress;
+    const addr = String(rawAddr ?? '').trim();
+    const normalized: StoreSettings = {
+      ...newSettings,
+      address: addr,
+      storeAddress: addr,
+    };
+
+    // 1. Immediately update React state for instant local responsiveness
+    setSettings(normalized);
+
+    // 2. Persist to localStorage
+    StorageService.saveSettings(normalized);
+
+    // 3. Persist to Firestore across all devices
+    try {
+      const ok = await saveSettingsToFirebase(normalized);
+      if (!ok) {
+        console.warn('Firebase saveSettingsToFirebase returned false');
+      }
+      return ok;
+    } catch (err) {
+      console.warn('Firebase settings save error:', err);
+      return false;
+    }
   };
 
   // Reset to initial demo data
@@ -666,10 +794,12 @@ export default function App() {
   // Low Stock Count for Badge
   const lowStockCount = products.filter((p) => p.stok <= p.stok_minimum).length;
 
-  // Check if current user is an authenticated internal staff member (Owner, Admin, Kasir, Staff)
+  // Check if current user is an authenticated internal staff member (Owner, Admin, Kasir, Staff, Delivery)
   const isStaffAuthenticated =
     currentUser !== null &&
-    ['Owner', 'Admin', 'Kasir', 'Staff'].includes(currentUser.role);
+    ['Owner', 'Admin', 'Kasir', 'Staff', 'Delivery', 'ADMIN', 'KASIR', 'DELIVERY'].includes(
+      currentUser.role
+    );
 
   // 1. Direct Customer QR Self-Order Mode (from QR Code camera scan)
   if (isCustomerMode) {
@@ -888,6 +1018,18 @@ export default function App() {
               onPrintReceipt={setReceiptTx}
               showToast={showToast}
               onNavigateToQR={() => setActiveTab('qrcode_order')}
+              onNavigateToDeliveryDQM={() => setActiveTab('delivery_dqm')}
+            />
+          )}
+
+          {activeTab === 'delivery_dqm' && (
+            <DeliveryDQMDashboard
+              transactions={transactions}
+              settings={settings}
+              userRole={effectiveRole}
+              onUpdateDeliveryStatus={handleUpdateDeliveryStatus}
+              onViewReceipt={setReceiptTx}
+              showToast={showToast}
             />
           )}
 

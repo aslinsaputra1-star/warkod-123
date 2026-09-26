@@ -255,10 +255,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                   </button>
                   <button
                     onClick={() => {
-                      if (window.confirm(`Hapus pelanggan "${c.nama}"?`)) {
-                        onDeleteCustomer(c.id);
-                        showToast('Pelanggan berhasil dihapus.', 'info');
+                      try {
+                        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                          if (!window.confirm(`Hapus pelanggan "${c.nama}"?`)) {
+                            return;
+                          }
+                        }
+                      } catch {
+                        // Continue if restricted
                       }
+                      onDeleteCustomer(c.id);
+                      showToast('Pelanggan berhasil dihapus.', 'info');
                     }}
                     className="p-2 rounded-xl bg-stone-800 hover:bg-rose-900/40 text-stone-400 hover:text-rose-300 transition"
                     title="Hapus"

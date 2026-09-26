@@ -1,4 +1,114 @@
-import { Transaction } from '../types';
+import { Transaction, OrderType, DeliveryStatus, OrderQueueStatus, StoreSettings } from '../types';
+
+export const DQM_LOCATIONS = [
+  'Asrama Putra',
+  'Asrama Putri',
+  'Gedung Sekolah / Kelas',
+  'Kantor / Sekretariat DQM',
+  'Masjid / Aula DQM',
+  'Rumah Ustadz / Pengajar',
+  'Pos Keamanan / Gerbang DQM',
+  'Kantin / Koperasi DQM',
+];
+
+export function resolveOrderType(tx: Partial<Transaction>): OrderType {
+  if (tx.orderType === 'DELIVERY_DQM' || tx.tipe_pesanan === 'DELIVERY_DQM' || tx.tipe_pesanan === 'Delivery') {
+    return 'DELIVERY_DQM';
+  }
+  return 'BUNGKUS';
+}
+
+export function normalizeOrderStatus(status?: string): OrderQueueStatus {
+  if (!status) return 'MENUNGGU';
+  const upper = status.toUpperCase().trim();
+  if (upper === 'PENDING' || upper === 'MENUNGGU') return 'MENUNGGU';
+  if (upper === 'DIPROSES') return 'DIPROSES';
+  if (upper === 'SIAP' || upper === 'SIAP DIAMBIL' || upper === 'SIAP DIANTAR') return 'SIAP';
+  if (upper === 'SELESAI') return 'SELESAI';
+  if (upper === 'DIBATALKAN') return 'DIBATALKAN';
+  return 'MENUNGGU';
+}
+
+export const normalizeOrderQueueStatus = normalizeOrderStatus;
+
+export function normalizeDeliveryStatus(
+  txOrDeliveryStatus?: Partial<Transaction> | string | null,
+  fallbackOrderStatus?: string
+): DeliveryStatus {
+  let rawDeliveryStatus: string | null | undefined;
+  let rawOrderStatus: string | undefined = fallbackOrderStatus;
+
+  if (typeof txOrDeliveryStatus === 'string') {
+    rawDeliveryStatus = txOrDeliveryStatus;
+  } else if (txOrDeliveryStatus && typeof txOrDeliveryStatus === 'object') {
+    rawDeliveryStatus = txOrDeliveryStatus.deliveryStatus;
+    rawOrderStatus = txOrDeliveryStatus.status;
+  }
+
+  if (rawDeliveryStatus) {
+    const ds = rawDeliveryStatus.toUpperCase().trim();
+    if (ds === 'MENUNGGU') return 'MENUNGGU';
+    if (ds === 'DIPROSES') return 'DIPROSES';
+    if (ds === 'SIAP DIANTAR' || ds === 'SIAP') return 'SIAP DIANTAR';
+    if (ds === 'DIANTAR' || ds === 'SEDANG DIANTAR') return 'DIANTAR';
+    if (ds === 'SELESAI') return 'SELESAI';
+    if (ds === 'DIBATALKAN') return 'DIBATALKAN';
+  }
+  const ordStatus = normalizeOrderStatus(rawOrderStatus);
+  if (ordStatus === 'MENUNGGU') return 'MENUNGGU';
+  if (ordStatus === 'DIPROSES') return 'DIPROSES';
+  if (ordStatus === 'SIAP') return 'SIAP DIANTAR';
+  if (ordStatus === 'SELESAI') return 'SELESAI';
+  if (ordStatus === 'DIBATALKAN') return 'DIBATALKAN';
+  return 'MENUNGGU';
+}
+
+export function getOrderStatusLabel(status?: string, orderType?: OrderType | string): string {
+  const norm = normalizeOrderStatus(status);
+  const isDelivery = orderType === 'DELIVERY_DQM' || orderType === 'Delivery';
+  if (norm === 'SIAP') {
+    return isDelivery ? 'SIAP DIANTAR' : 'SIAP DIAMBIL';
+  }
+  return norm;
+}
+
+export function getDeliveryStatusLabel(deliveryStatus?: DeliveryStatus | string | null): string {
+  if (!deliveryStatus) return 'MENUNGGU';
+  const upper = deliveryStatus.toUpperCase().trim();
+  if (upper === 'DIANTAR' || upper === 'SEDANG DIANTAR') return 'SEDANG DIANTAR';
+  if (upper === 'SIAP' || upper === 'SIAP DIANTAR') return 'SIAP DIANTAR';
+  return upper;
+}
+
+export function isOrderCompleted(status?: string): boolean {
+  return normalizeOrderStatus(status) === 'SELESAI';
+}
+
+export function isOrderCancelled(status?: string): boolean {
+  return normalizeOrderStatus(status) === 'DIBATALKAN';
+}
+
+export function getEffectiveDeliveryFee(settings?: Partial<StoreSettings>, orderType?: OrderType | string): number {
+  if (orderType !== 'DELIVERY_DQM' && orderType !== 'Delivery') return 0;
+  if (!settings || settings.deliveryFeeType === 'FREE') return 0;
+  return Number(settings.deliveryFeeAmount || 0);
+}
+
+export const calculateDeliveryDqmFee = getEffectiveDeliveryFee;
+
+export function formatDeliveryLocationSummary(tx: Partial<Transaction>): string {
+  const type = resolveOrderType(tx);
+  if (type === 'BUNGKUS') {
+    return 'Ambil di Warung (BUNGKUS)';
+  }
+  const parts: string[] = ['Pesantren DQM'];
+  if (tx.deliveryLocation) parts.push(tx.deliveryLocation);
+  if (tx.deliveryDetail) parts.push(`(${tx.deliveryDetail})`);
+  if (parts.length === 1 && tx.alamat_pengantaran) {
+    return tx.alamat_pengantaran;
+  }
+  return parts.join(' • ');
+}
 
 export function formatRupiah(amount: number): string {
   const rounded = Math.round(amount || 0);
@@ -68,10 +178,13 @@ export function sanitizeWhatsAppNumber(phone: string): string {
 export interface OnlineQRCodeOrderPayload {
   orderId: string;
   storeName: string;
-  orderType: 'Takeaway' | 'Delivery';
+  orderType: 'BUNGKUS' | 'DELIVERY_DQM' | 'Takeaway' | 'Delivery';
   customerName: string;
   customerPhone: string;
   pickupTime?: string;
+  deliveryArea?: string | null;
+  deliveryLocation?: string | null;
+  deliveryDetail?: string | null;
   deliveryAddress?: string;
   deliveryLandmark?: string;
   deliveryFee?: number;
@@ -85,33 +198,40 @@ export interface OnlineQRCodeOrderPayload {
 export function buildOnlineQRCodeOrderWhatsAppMessage(
   payload: OnlineQRCodeOrderPayload
 ): string {
-  const isDelivery = payload.orderType === 'Delivery';
-  const typeLabel = isDelivery ? '🛵 DELIVERY (PESAN ANTAR)' : '🥡 TAKEAWAY (BUNGKUS / AMBIL SENDIRI)';
+  const isDelivery = payload.orderType === 'DELIVERY_DQM' || payload.orderType === 'Delivery';
+  const typeLabel = isDelivery ? '[DELIVERY DQM] Pesantren DQM' : '[BUNGKUS] Ambil di Warung';
 
-  let msg = `*PESANAN ONLINE QR CODE*\n`;
+  let msg = `*PESANAN QR MENU*\n`;
   msg += `*${payload.storeName.toUpperCase()}*\n`;
   msg += `==============================\n`;
-  msg += `📋 *No. Pesanan:* ${payload.orderId}\n`;
-  msg += `📌 *Layanan:* ${typeLabel}\n\n`;
+  msg += `📋 *No. Transaksi:* ${payload.orderId}\n`;
+  msg += `📌 *Jenis Pesanan:* ${typeLabel}\n\n`;
 
-  msg += `👤 *Data Pelanggan:*\n`;
+  msg += `👤 *Data Pemesan:*\n`;
   msg += `• Nama: ${payload.customerName}\n`;
-  msg += `• WhatsApp: ${payload.customerPhone}\n`;
+  if (payload.customerPhone) {
+    msg += `• WhatsApp: ${payload.customerPhone}\n`;
+  }
 
   if (isDelivery) {
-    if (payload.deliveryAddress) {
-      msg += `• Alamat Antar: ${payload.deliveryAddress}\n`;
+    msg += `• Area: Pesantren DQM\n`;
+    if (payload.deliveryLocation) {
+      msg += `• Lokasi: ${payload.deliveryLocation}\n`;
     }
-    if (payload.deliveryLandmark) {
-      msg += `• Patokan Lokasi: ${payload.deliveryLandmark}\n`;
+    if (payload.deliveryDetail) {
+      msg += `• Detail Lokasi: ${payload.deliveryDetail}\n`;
+    }
+    if (!payload.deliveryLocation && payload.deliveryAddress) {
+      msg += `• Lokasi: ${payload.deliveryAddress}\n`;
     }
   } else {
+    msg += `• Info: Pesanan akan disiapkan untuk diambil (BUNGKUS)\n`;
     if (payload.pickupTime) {
       msg += `• Jam Ambil: ${payload.pickupTime}\n`;
     }
   }
 
-  msg += `\n🛒 *Daftar Menu Pesanan:*\n`;
+  msg += `\n🛒 *Daftar Pesanan:*\n`;
   payload.items.forEach((item, idx) => {
     const sub = item.qty * item.price;
     msg += `${idx + 1}. *${item.name}* x${item.qty} = ${formatRupiah(sub)}\n`;
@@ -122,14 +242,14 @@ export function buildOnlineQRCodeOrderWhatsAppMessage(
 
   msg += `\n==============================\n`;
   msg += `Subtotal: ${formatRupiah(payload.subtotal)}\n`;
-  if (isDelivery && payload.deliveryFee && payload.deliveryFee > 0) {
-    msg += `Ongkos Kirim: ${formatRupiah(payload.deliveryFee)}\n`;
+  if (isDelivery) {
+    msg += `Biaya Delivery DQM: ${payload.deliveryFee && payload.deliveryFee > 0 ? formatRupiah(payload.deliveryFee) : 'GRATIS'}\n`;
   }
   msg += `*TOTAL BAYAR: ${formatRupiah(payload.total)}*\n`;
   msg += `💳 *Pembayaran:* ${payload.paymentMethod}\n`;
 
   if (payload.notes && payload.notes.trim() !== '') {
-    msg += `\n📝 *Catatan Khusus:* ${payload.notes.trim()}\n`;
+    msg += `\n📝 *Catatan:* ${payload.notes.trim()}\n`;
   }
 
   msg += `==============================\n`;
@@ -197,12 +317,19 @@ export function buildCashierReceiptWhatsAppMessage(
   tx: Transaction,
   storeName = 'WARUNG BANG KOBRA'
 ): string {
+  const orderType = resolveOrderType(tx);
+  const isDelivery = orderType === 'DELIVERY_DQM';
   let text = `${storeName.toUpperCase()}\n`;
   text += `====================\n`;
   text += `No: ${tx.id_transaksi}\n`;
+  text += `Jenis: [${isDelivery ? 'DELIVERY DQM' : 'BUNGKUS'}]\n`;
   text += `Tanggal: ${tx.tanggal} ${tx.jam}\n`;
-  text += `Kasir: ${tx.kasir}\n\n`;
-  text += `Pesanan:\n`;
+  text += `Kasir: ${tx.kasir}\n`;
+  text += `Pelanggan: ${tx.nama_pelanggan}\n`;
+  if (isDelivery) {
+    text += `Lokasi: Pesantren DQM - ${tx.deliveryLocation || ''} ${tx.deliveryDetail ? `(${tx.deliveryDetail})` : ''}\n`;
+  }
+  text += `\nPesanan:\n`;
 
   tx.items.forEach((item) => {
     const lineSub = formatRupiah(item.subtotal || item.harga * item.qty);
@@ -218,7 +345,10 @@ export function buildCashierReceiptWhatsAppMessage(
   if (tx.diskon > 0) {
     text += `Diskon: -${formatRupiah(tx.diskon)}\n`;
   }
-  if (tx.biaya > 0) {
+  if (isDelivery) {
+    const delivFee = Number(tx.deliveryFee ?? tx.biaya ?? 0);
+    text += `Biaya Delivery DQM: ${delivFee > 0 ? formatRupiah(delivFee) : 'GRATIS'}\n`;
+  } else if (tx.biaya > 0) {
     text += `Biaya Tambahan: +${formatRupiah(tx.biaya)}\n`;
   }
   text += `Total: ${formatRupiah(tx.total)}\n`;
@@ -239,7 +369,14 @@ export function openWhatsAppChat(phoneNumber: string, message: string): void {
   const url = sanitized
     ? `https://wa.me/${sanitized}?text=${encodedText}`
     : `https://api.whatsapp.com/send?text=${encodedText}`;
-  window.open(url, '_blank');
+  try {
+    const win = window.open(url, '_blank');
+    if (!win || win.closed || typeof win.closed === 'undefined') {
+      window.location.href = url;
+    }
+  } catch {
+    window.location.href = url;
+  }
 }
 
 /**

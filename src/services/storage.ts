@@ -401,12 +401,22 @@ export class StorageService {
     if (!settings.logoUrl || settings.logoUrl.trim() === '') {
       settings.logoUrl = '/icon.svg';
     }
+    const addr = String(settings.address || settings.storeAddress || '').trim();
+    if (addr) {
+      settings.address = addr;
+      settings.storeAddress = addr;
+    }
     return settings;
   }
 
   static saveSettings(settings: StoreSettings): void {
     if (!settings.logoUrl || settings.logoUrl.trim() === '') {
       settings.logoUrl = '/icon.svg';
+    }
+    const addr = String(settings.address || settings.storeAddress || '').trim();
+    if (addr) {
+      settings.address = addr;
+      settings.storeAddress = addr;
     }
     safeSetItem(STORAGE_KEYS.SETTINGS, settings);
   }

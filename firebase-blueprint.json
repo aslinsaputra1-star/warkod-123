@@ -22,8 +22,8 @@
         },
         "role": {
           "type": "string",
-          "description": "Role in the system (Owner, Admin, Kasir, Staff, Customer)",
-          "enum": ["Owner", "Admin", "Kasir", "Staff", "Customer", "owner", "admin", "kasir", "staff", "customer", "ADMIN", "KASIR"]
+          "description": "Role in the system (Owner, Admin, Kasir, Staff, Delivery, Customer)",
+          "enum": ["Owner", "Admin", "Kasir", "Staff", "Delivery", "Customer", "owner", "admin", "kasir", "staff", "delivery", "customer", "ADMIN", "KASIR", "DELIVERY"]
         },
         "no_hp": {
           "type": "string",
@@ -222,11 +222,45 @@
         "status": {
           "type": "string",
           "description": "Order status",
-          "enum": ["Pending", "Diproses", "Selesai", "Dibatalkan"]
+          "enum": ["Pending", "Diproses", "Siap", "Selesai", "Dibatalkan", "MENUNGGU", "DIPROSES", "SIAP", "SELESAI", "DIBATALKAN"]
+        },
+        "orderType": {
+          "type": "string",
+          "description": "Order service type: BUNGKUS or DELIVERY_DQM",
+          "enum": ["BUNGKUS", "DELIVERY_DQM"]
+        },
+        "deliveryArea": {
+          "type": "string",
+          "description": "Delivery area restriction (must be DQM for DELIVERY_DQM, or null for BUNGKUS)",
+          "maxLength": 32
+        },
+        "deliveryLocation": {
+          "type": "string",
+          "description": "DQM Location / Block / Dormitory / Building",
+          "maxLength": 150
+        },
+        "deliveryDetail": {
+          "type": "string",
+          "description": "Specific room or location detail inside Pesantren DQM",
+          "maxLength": 200
+        },
+        "deliveryNote": {
+          "type": "string",
+          "description": "Delivery notes or timing instructions",
+          "maxLength": 300
+        },
+        "deliveryFee": {
+          "type": "number",
+          "description": "Delivery fee for Pesantren DQM (0 for BUNGKUS or free delivery)"
+        },
+        "deliveryStatus": {
+          "type": "string",
+          "description": "Delivery workflow status for DELIVERY_DQM orders",
+          "enum": ["MENUNGGU", "DIPROSES", "SIAP DIANTAR", "DIANTAR", "SELESAI", "DIBATALKAN"]
         },
         "tipe_pesanan": {
           "type": "string",
-          "description": "Takeaway or Delivery",
+          "description": "BUNGKUS or DELIVERY_DQM",
           "maxLength": 32
         },
         "alamat_pengantaran": {
@@ -451,6 +485,11 @@
         "address": {
           "type": "string",
           "description": "Store address",
+          "maxLength": 250
+        },
+        "storeAddress": {
+          "type": "string",
+          "description": "Store address alias for cross-device compatibility",
           "maxLength": 250
         },
         "whatsappNumber": {

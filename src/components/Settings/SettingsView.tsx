@@ -21,14 +21,19 @@ import {
   Download,
   Upload,
   FileDown,
+  AlertCircle,
+  Truck,
+  MapPin,
 } from 'lucide-react';
 import { StoreSettings, Product } from '../../types';
+import { formatRupiah } from '../../utils/formatters';
 import { GoogleSheetsSyncService } from '../../services/googleSheetsSync';
 import { StorageService } from '../../services/storage';
 import { LogoUploader } from './LogoUploader';
 import {
   testFirestoreConnection,
   syncProductsToFirebase,
+  syncAllDataToFirebase,
   firebaseConfig,
 } from '../../services/firebase';
 import {
@@ -42,7 +47,7 @@ import {
 interface SettingsViewProps {
   settings: StoreSettings;
   products?: Product[];
-  onSaveSettings: (newSettings: StoreSettings) => void;
+  onSaveSettings: (newSettings: StoreSettings) => void | boolean | Promise<boolean | void>;
   onSyncNow: () => void;
   isSyncing: boolean;
   onResetData: () => void;
@@ -58,11 +63,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onResetData,
   showToast,
 }) => {
-  const [formData, setFormData] = useState<StoreSettings>({ ...settings });
+  // Track whether the user has uncommitted local edits
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const dirtyFieldsRef = useRef<Set<keyof StoreSettings>>(new Set());
+  const [hasRemoteNotice, setHasRemoteNotice] = useState(false);
+  const [pendingRemoteSettings, setPendingRemoteSettings] = useState<StoreSettings | null>(null);
+
+  const [formData, setFormData] = useState<StoreSettings>(() => {
+    const rawAddr = settings.address !== undefined ? settings.address : settings.storeAddress;
+    const addr = String(rawAddr ?? '').trim();
+    return {
+      ...settings,
+      address: addr,
+      storeAddress: addr,
+    };
+  });
 
   useEffect(() => {
-    setFormData({ ...settings });
-  }, [settings]);
+    const rawAddr = settings.address !== undefined ? settings.address : settings.storeAddress;
+    const remoteAddr = String(rawAddr ?? '').trim();
+    const normalizedRemote: StoreSettings = {
+      ...settings,
+      address: remoteAddr,
+      storeAddress: remoteAddr,
+    };
+
+    // If the user has NOT edited the form locally, keep the form seamlessly synchronized with incoming Firestore updates
+    if (!isDirty) {
+      setFormData(normalizedRemote);
+      setHasRemoteNotice(false);
+      setPendingRemoteSettings(null);
+    } else {
+      // User has unsaved edits: DO NOT overwrite local edits!
+      // Compare if the remote data differs from our current formData
+      const currentAddr = String(formData.address || formData.storeAddress || '').trim();
+      const hasAddressChanged = remoteAddr !== currentAddr;
+      const hasNameChanged = settings.storeName !== formData.storeName;
+      if (hasAddressChanged || hasNameChanged) {
+        setHasRemoteNotice(true);
+        setPendingRemoteSettings(normalizedRemote);
+      }
+    }
+  }, [settings, isDirty]);
+
   const [isTestingUrl, setIsTestingUrl] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [showGuideModal, setShowGuideModal] = useState(false);
@@ -74,15 +118,81 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     message: string;
   } | null>(null);
   const [isSyncingFirebaseProducts, setIsSyncingFirebaseProducts] = useState(false);
+  const [isSyncingAllFirebase, setIsSyncingAllFirebase] = useState(false);
 
   const handleInputChange = (field: keyof StoreSettings, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    dirtyFieldsRef.current.add(field);
+    if (field === 'address' || field === 'storeAddress') {
+      dirtyFieldsRef.current.add('address');
+      dirtyFieldsRef.current.add('storeAddress');
+    }
+    setIsDirty(true);
+    setFormData((prev) => {
+      const updated = { ...prev, [field]: value };
+      if (field === 'address' || field === 'storeAddress') {
+        updated.address = value;
+        updated.storeAddress = value;
+      }
+      return updated;
+    });
   };
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSaveSettings(formData);
-    showToast('Pengaturan toko berhasil disimpan!', 'success');
+  const handleDiscard = () => {
+    const rawAddr = settings.address !== undefined ? settings.address : settings.storeAddress;
+    const addr = String(rawAddr ?? '').trim();
+    setFormData({
+      ...settings,
+      address: addr,
+      storeAddress: addr,
+    });
+    dirtyFieldsRef.current.clear();
+    setIsDirty(false);
+    setHasRemoteNotice(false);
+    setPendingRemoteSettings(null);
+    showToast('Perubahan lokal dibatalkan. Memuat kembali data tersimpan.', 'info');
+  };
+
+  const handleApplyRemote = () => {
+    if (pendingRemoteSettings) {
+      setFormData(pendingRemoteSettings);
+    } else {
+      const rawAddr = settings.address !== undefined ? settings.address : settings.storeAddress;
+      const addr = String(rawAddr ?? '').trim();
+      setFormData({
+        ...settings,
+        address: addr,
+        storeAddress: addr,
+      });
+    }
+    dirtyFieldsRef.current.clear();
+    setIsDirty(false);
+    setHasRemoteNotice(false);
+    setPendingRemoteSettings(null);
+    showToast('Data pengaturan terbaru dari cloud berhasil diterapkan!', 'success');
+  };
+
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setIsSaving(true);
+    try {
+      const rawAddr = formData.address !== undefined ? formData.address : formData.storeAddress;
+      const addr = String(rawAddr ?? '').trim();
+      const normalized: StoreSettings = {
+        ...formData,
+        address: addr,
+        storeAddress: addr,
+      };
+      await onSaveSettings(normalized);
+      dirtyFieldsRef.current.clear();
+      setIsDirty(false);
+      setHasRemoteNotice(false);
+      setPendingRemoteSettings(null);
+      showToast('Pengaturan warung & alamat berhasil disimpan ke cloud Firebase!', 'success');
+    } catch (err: any) {
+      showToast('Gagal menyimpan ke cloud: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -153,6 +263,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const handleSyncAllFirebase = async () => {
+    setIsSyncingAllFirebase(true);
+    try {
+      const allTransactions = StorageService.getTransactions();
+      const allCustomers = StorageService.getCustomers();
+      const allExpenses = StorageService.getExpenses();
+      const allCategories = StorageService.getCategories();
+      const allMutations = StorageService.getStockMutations();
+      const addr = String(formData.address || formData.storeAddress || '').trim();
+      const currentSettings: StoreSettings = {
+        ...formData,
+        address: addr,
+        storeAddress: addr,
+      };
+
+      const res = await syncAllDataToFirebase({
+        settings: currentSettings,
+        products,
+        categories: allCategories,
+        transactions: allTransactions,
+        customers: allCustomers,
+        expenses: allExpenses,
+        mutations: allMutations,
+      });
+
+      if (res.success) {
+        onSaveSettings(currentSettings);
+        showToast(res.message, 'success');
+      } else {
+        showToast(res.message, 'error');
+      }
+    } catch (err: any) {
+      showToast('Gagal sinkronisasi data: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsSyncingAllFirebase(false);
+    }
+  };
+
   const sampleAppsScriptCode = `// Script google-apps-script.js
 // Buka Google Sheets -> Ekstensi -> Apps Script
 // Tempel kode dari file google-apps-script.js pada repositori aplikasi ini
@@ -173,17 +321,240 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={handleSave}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-extrabold text-xs shadow-lg shadow-amber-950/30 transition active:scale-95"
-        >
-          <Save className="w-4 h-4" />
-          <span>Simpan Perubahan</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {isDirty && (
+            <button
+              type="button"
+              onClick={handleDiscard}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition active:scale-95 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Batal</span>
+            </button>
+          )}
+          <button
+            type="button"
+            id="btn-save-settings-header"
+            onClick={() => handleSave()}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-extrabold text-xs shadow-lg shadow-amber-950/30 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+          >
+            <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+            <span>{isSaving ? 'Menyimpan...' : isDirty ? 'Simpan Perubahan *' : 'Simpan Perubahan'}</span>
+          </button>
+        </div>
       </div>
 
+      {/* Cloud Remote Update Alert if local edits are in progress */}
+      {hasRemoteNotice && pendingRemoteSettings && (
+        <div className="p-4 bg-amber-950/50 border border-amber-500/50 rounded-2xl flex flex-wrap items-center justify-between gap-3 shadow-lg animate-fadeIn">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+              <AlertCircle className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-stone-200">
+                Pembaruan Toko Diterima dari Cloud / Perangkat Lain
+              </p>
+              <p className="text-[11px] text-stone-400">
+                Alamat atau data toko di cloud telah diperbarui oleh perangkat lain. Editan lokal Anda saat ini tetap aman di layar.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleApplyRemote}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold text-xs transition active:scale-95 cursor-pointer shadow-md"
+            >
+              Muat Versi Cloud
+            </button>
+            <button
+              type="button"
+              onClick={() => setHasRemoteNotice(false)}
+              className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs transition cursor-pointer"
+            >
+              Tetap Pakai Editan Saya
+            </button>
+          </div>
+        </div>
+      )}
+
       <form onSubmit={handleSave} className="space-y-6">
+        {/* Section: Pengaturan → Delivery DQM */}
+        <div
+          id="settings-delivery-dqm"
+          className="bg-stone-900 border-2 border-amber-500/40 rounded-3xl p-6 space-y-5 shadow-xl relative overflow-hidden"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-stone-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <Truck className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-black text-stone-100 text-base sm:text-lg">
+                    Pengaturan → Delivery DQM
+                  </h3>
+                  <span className="text-[10px] font-black px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase">
+                    Khusus Pesantren DQM
+                  </span>
+                </div>
+                <p className="text-xs text-stone-400">
+                  Atur kebijakan biaya pengantaran khusus untuk area Pesantren DQM (Gratis atau Biaya Tetap).
+                </p>
+              </div>
+            </div>
+
+            <div className="px-3.5 py-2 rounded-2xl bg-stone-950 border border-amber-500/40 text-right">
+              <div className="text-[10px] font-bold text-stone-400 uppercase">Status Tarif Saat Ini</div>
+              <div className="text-sm font-black text-amber-400">
+                {(formData.deliveryFeeType || 'FREE') === 'FREE'
+                  ? 'Delivery DQM: GRATIS'
+                  : `Biaya Delivery DQM: ${formatRupiah(Number(formData.deliveryFeeAmount ?? 2000))}`}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Option 1: Gratis Delivery */}
+            <button
+              type="button"
+              onClick={() => {
+                handleInputChange('deliveryFeeType', 'FREE');
+              }}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+                (formData.deliveryFeeType || 'FREE') === 'FREE'
+                  ? 'bg-emerald-950/30 border-emerald-500 text-stone-100 shadow-lg shadow-emerald-950/30'
+                  : 'bg-stone-950 border-stone-800 text-stone-400 hover:border-stone-700'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 ${
+                  (formData.deliveryFeeType || 'FREE') === 'FREE'
+                    ? 'border-emerald-400 bg-emerald-500 text-stone-950'
+                    : 'border-stone-600'
+                }`}
+              >
+                {(formData.deliveryFeeType || 'FREE') === 'FREE' && (
+                  <div className="w-2 h-2 rounded-full bg-stone-950" />
+                )}
+              </div>
+              <div className="space-y-1">
+                <div className="font-black text-sm text-stone-100 flex items-center gap-2">
+                  <span>Gratis Delivery</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                    Rp0
+                  </span>
+                </div>
+                <p className="text-xs text-stone-400">
+                  Pelanggan di area Pesantren DQM tidak dikenakan biaya tambahan pengantaran.
+                </p>
+                <div className="pt-1 text-xs font-mono font-bold text-emerald-400">
+                  Contoh tampilan: Delivery DQM: GRATIS
+                </div>
+              </div>
+            </button>
+
+            {/* Option 2: Biaya Delivery Tetap */}
+            <button
+              type="button"
+              onClick={() => {
+                handleInputChange('deliveryFeeType', 'FIXED');
+                if (!formData.deliveryFeeAmount || formData.deliveryFeeAmount <= 0) {
+                  handleInputChange('deliveryFeeAmount', 2000);
+                }
+              }}
+              className={`p-4 rounded-2xl border-2 text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+                formData.deliveryFeeType === 'FIXED'
+                  ? 'bg-amber-950/30 border-amber-500 text-stone-100 shadow-lg shadow-amber-950/30'
+                  : 'bg-stone-950 border-stone-800 text-stone-400 hover:border-stone-700'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 shrink-0 ${
+                  formData.deliveryFeeType === 'FIXED'
+                    ? 'border-amber-400 bg-amber-500 text-stone-950'
+                    : 'border-stone-600'
+                }`}
+              >
+                {formData.deliveryFeeType === 'FIXED' && (
+                  <div className="w-2 h-2 rounded-full bg-stone-950" />
+                )}
+              </div>
+              <div className="space-y-1 flex-1">
+                <div className="font-black text-sm text-stone-100 flex items-center gap-2">
+                  <span>Biaya Delivery Tetap</span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                    Flat Rate
+                  </span>
+                </div>
+                <p className="text-xs text-stone-400">
+                  Tetapkan tarif ongkos kirim tetap untuk setiap pesanan DELIVERY DQM.
+                </p>
+                <div className="pt-1 text-xs font-mono font-bold text-amber-400">
+                  Contoh tampilan: Biaya Delivery DQM: {formatRupiah(Number(formData.deliveryFeeAmount ?? 2000))}
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {formData.deliveryFeeType === 'FIXED' && (
+            <div className="p-4 rounded-2xl bg-stone-950 border border-amber-500/40 space-y-3 animate-fadeIn">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label className="text-xs font-black text-amber-400 block">
+                    Nominal Biaya Delivery DQM (Rp)
+                  </label>
+                  <span className="text-[11px] text-stone-400">
+                    Biaya ini otomatis ditambahkan saat customer memilih DELIVERY DQM. Untuk BUNGKUS, biaya selalu Rp0.
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {[1000, 2000, 3000, 5000].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => handleInputChange('deliveryFeeAmount', preset)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-extrabold border transition cursor-pointer ${
+                        Number(formData.deliveryFeeAmount) === preset
+                          ? 'bg-amber-500 text-stone-950 border-amber-400'
+                          : 'bg-stone-900 text-stone-300 border-stone-700 hover:border-amber-500/50'
+                      }`}
+                    >
+                      {formatRupiah(preset)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input
+                type="number"
+                min={0}
+                step={500}
+                value={formData.deliveryFeeAmount ?? 2000}
+                onChange={(e) => handleInputChange('deliveryFeeAmount', Math.max(0, Number(e.target.value)))}
+                className="w-full sm:w-64 bg-stone-900 border border-amber-500/50 rounded-xl px-3.5 py-2 text-sm font-mono font-black text-amber-300 focus:outline-none focus:border-amber-400"
+              />
+            </div>
+          )}
+
+          <div className="p-3.5 rounded-2xl bg-stone-950 border border-stone-800 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs text-stone-300">
+              <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                Validasi Area Aktif: <strong>Hanya Pesantren DQM (deliveryArea = DQM)</strong>. Pesanan di luar area DQM otomatis ditolak.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleSave()}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs transition cursor-pointer shadow-md"
+            >
+              Simpan Pengaturan Delivery DQM
+            </button>
+          </div>
+        </div>
         {/* Section 0: Identitas Visual & Upload Logo Warung */}
         <div className="bg-stone-900 border border-stone-800 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-stone-800">
@@ -292,13 +663,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
 
             <div className="sm:col-span-2">
-              <label className="text-xs font-bold text-stone-300 mb-1 block">Alamat Warung</label>
+              <label className="text-xs font-bold text-stone-300 mb-1 flex items-center justify-between">
+                <span>Alamat Warung *</span>
+                <span className="text-[10px] text-amber-400 font-medium flex items-center gap-1">
+                  <span>📍</span>
+                  <span>Sinkron otomatis ke struk & semua perangkat</span>
+                </span>
+              </label>
               <input
                 type="text"
-                value={formData.storeAddress}
-                onChange={(e) => handleInputChange('storeAddress', e.target.value)}
-                className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                id="input-store-address"
+                value={formData.address || formData.storeAddress || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleInputChange('address', val);
+                  handleInputChange('storeAddress', val);
+                }}
+                placeholder="Contoh: Jl. Raya Kuliner No. 88, Samping Kampus / Pasar Malam"
+                className="w-full bg-stone-950 border border-stone-700 rounded-xl px-3.5 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500 shadow-inner"
               />
+              <span className="text-[10px] text-stone-400 mt-1 block">
+                Alamat ini otomatis tercetak pada struk belanja, pratinjau menu online, dan titik jemput Takeaway & Delivery.
+              </span>
             </div>
 
             <div className="sm:col-span-2">
@@ -407,10 +793,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 id="btn-sync-firebase-products"
                 onClick={handleSyncFirebaseProducts}
                 disabled={isSyncingFirebaseProducts}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-extrabold transition shadow-md shadow-orange-950/40 active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold transition active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                <Flame className={`w-3.5 h-3.5 ${isSyncingFirebaseProducts ? 'animate-spin' : ''}`} />
-                <span>{isSyncingFirebaseProducts ? 'Menyinkronkan...' : 'Sinkronkan Menu ke Firebase'}</span>
+                <Flame className={`w-3.5 h-3.5 ${isSyncingFirebaseProducts ? 'animate-spin text-orange-400' : 'text-orange-400'}`} />
+                <span>{isSyncingFirebaseProducts ? 'Menyinkronkan...' : 'Sinkron Menu Saja'}</span>
+              </button>
+
+              <button
+                type="button"
+                id="btn-sync-all-firebase"
+                onClick={handleSyncAllFirebase}
+                disabled={isSyncingAllFirebase}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-orange-600 via-amber-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 text-stone-950 text-xs font-black transition shadow-lg shadow-orange-950/40 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <Flame className={`w-3.5 h-3.5 text-stone-950 ${isSyncingAllFirebase ? 'animate-spin' : ''}`} />
+                <span>{isSyncingAllFirebase ? 'Menyelaraskan Semua Data...' : 'Sinkronkan Semua Data ke Cloud (Multi-Device)'}</span>
               </button>
             </div>
           </div>
@@ -658,19 +1055,59 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <button
               type="button"
               onClick={() => {
-                if (
-                  window.confirm(
-                    'PERINGATAN: Apakah Anda yakin ingin mengembalikan seluruh data ke data awal Warung Bang Kobra?'
-                  )
-                ) {
-                  onResetData();
-                  showToast('Data berhasil dikembalikan ke data awal.', 'info');
+                try {
+                  if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+                    if (!window.confirm('PERINGATAN: Apakah Anda yakin ingin mengembalikan seluruh data ke data awal Warung Bang Kobra?')) {
+                      return;
+                    }
+                  }
+                } catch {
+                  // Continue if restricted
                 }
+                onResetData();
+                showToast('Data berhasil dikembalikan ke data awal.', 'info');
               }}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800 text-xs font-bold transition active:scale-95 cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               <span>Reset ke Data Demo Awal</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Sticky Bottom Action Bar for Quick Saving & Status */}
+        <div className="sticky bottom-4 z-20 p-4 rounded-2xl bg-stone-900/95 backdrop-blur-md border border-stone-800 shadow-2xl flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className={`w-2.5 h-2.5 rounded-full ${isDirty ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+            <div>
+              <p className="text-xs font-bold text-stone-200">
+                {isDirty ? 'Terdapat perubahan pengaturan lokal yang belum disimpan' : 'Semua data warung & alamat telah tersinkronisasi ke cloud'}
+              </p>
+              <p className="text-[10px] text-stone-400">
+                {isDirty
+                  ? 'Simpan perubahan untuk menyinkronkan alamat warung ke struk kasir & perangkat lain.'
+                  : 'Alamat warung aktif: ' + (formData.address || formData.storeAddress || '-')}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {isDirty && (
+              <button
+                type="button"
+                onClick={handleDiscard}
+                className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs transition active:scale-95 cursor-pointer"
+              >
+                Batalkan
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs shadow-lg shadow-amber-950/40 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <Save className={`w-4 h-4 ${isSaving ? 'animate-spin' : ''}`} />
+              <span>{isSaving ? 'Menyimpan...' : 'Simpan Perubahan Toko'}</span>
             </button>
           </div>
         </div>

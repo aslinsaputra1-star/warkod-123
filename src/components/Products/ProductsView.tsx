@@ -196,10 +196,17 @@ export const ProductsView: React.FC<ProductsViewProps> = ({
   };
 
   const handleDelete = (id: string, nama: string) => {
-    if (window.confirm(`Yakin ingin menghapus produk "${nama}"?`)) {
-      onDeleteProduct(id);
-      showToast(`Produk ${nama} berhasil dihapus.`, 'info');
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm(`Yakin ingin menghapus produk "${nama}"?`)) {
+          return;
+        }
+      }
+    } catch {
+      // Continue if window.confirm is restricted
     }
+    onDeleteProduct(id);
+    showToast(`Produk ${nama} berhasil dihapus.`, 'info');
   };
 
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);

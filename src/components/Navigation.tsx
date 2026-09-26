@@ -24,6 +24,8 @@ import {
   User,
   LogIn,
   Globe,
+  Megaphone,
+  Truck,
 } from 'lucide-react';
 import { ActiveTab, UserRole, WarungUser } from '../types';
 import { hasTabAccess, normalizeRole, getRoleBadgeInfo } from '../utils/rbac';
@@ -41,6 +43,7 @@ interface NavigationProps {
   onOpenLogoEditor?: () => void;
   logoUrl?: string;
   storeName?: string;
+  onLockApp?: () => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -54,6 +57,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   onOpenLogoEditor,
   logoUrl,
   storeName,
+  onLockApp,
 }) => {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
@@ -69,9 +73,9 @@ export const Navigation: React.FC<NavigationProps> = ({
     }
   };
 
-  // 1. DESKTOP NAVIGATION (Exactly 12 items as specified)
-  // Dashboard, Kasir, Pesanan, Produk, Kategori, Stok, Pelanggan, Pengeluaran, Laporan, Pengguna, QR Code, Pengaturan
-  const desktopNavItems: Array<{
+  const isDeliveryRole = normalizeRole(effectiveRole) === 'Delivery';
+
+  const allDesktopNavItems: Array<{
     id: ActiveTab;
     label: string;
     icon: React.ElementType;
@@ -80,7 +84,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   }> = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'pos', label: 'Kasir', icon: ShoppingCart },
-    { id: 'orders', label: 'Pesanan', icon: ShoppingBag },
+    { id: 'orders', label: 'Antrian Kasir', icon: ShoppingBag },
+    { id: 'delivery_dqm', label: 'Delivery DQM', icon: Truck, badgeText: 'DQM' },
     { id: 'products', label: 'Produk', icon: Package },
     { id: 'categories', label: 'Kategori', icon: Tags },
     { id: 'stock', label: 'Stok', icon: Layers, badge: lowStockCount },
@@ -88,28 +93,38 @@ export const Navigation: React.FC<NavigationProps> = ({
     { id: 'expenses', label: 'Pengeluaran', icon: Receipt },
     { id: 'reports', label: 'Laporan', icon: BarChart3 },
     { id: 'users', label: 'Pengguna', icon: UserCheck },
-    { id: 'qrcode_order', label: 'QR Code', icon: QrCode, badgeText: 'Takeaway' },
+    { id: 'qrcode_order', label: 'QR Menu', icon: QrCode, badgeText: 'QR' },
     { id: 'public_menu', label: 'Menu Online', icon: Globe, badgeText: 'Web' },
+    { id: 'menu_ads', label: 'Iklan Menu', icon: Megaphone, badgeText: 'Promo' },
     { id: 'login', label: 'Menu Login', icon: LogIn, badgeText: 'Akses' },
     { id: 'settings', label: 'Pengaturan', icon: SettingsIcon },
   ];
 
-  // 2. MOBILE BOTTOM NAVIGATION (Exactly: Home, Kasir, Pesanan, Produk, Menu)
+  // Petugas Delivery hanya dapat melihat menu Delivery DQM (& ganti akun login)
+  const desktopNavItems = isDeliveryRole
+    ? allDesktopNavItems.filter((item) => item.id === 'delivery_dqm' || item.id === 'login')
+    : allDesktopNavItems;
+
+  // 2. MOBILE BOTTOM NAVIGATION
   const mobileBottomItems: Array<{
     id: ActiveTab | 'menu';
     label: string;
     icon: React.ElementType;
     badge?: number;
-  }> = [
-    { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-    { id: 'pos', label: 'Kasir', icon: ShoppingCart },
-    { id: 'orders', label: 'Pesanan', icon: ShoppingBag },
-    { id: 'products', label: 'Produk', icon: Package },
-    { id: 'menu', label: 'Menu', icon: Menu },
-  ];
+  }> = isDeliveryRole
+    ? [
+        { id: 'delivery_dqm', label: 'Delivery DQM', icon: Truck },
+        { id: 'login', label: 'Akun Login', icon: LogIn },
+      ]
+    : [
+        { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
+        { id: 'pos', label: 'Kasir', icon: ShoppingCart },
+        { id: 'orders', label: 'Antrian Kasir', icon: ShoppingBag },
+        { id: 'delivery_dqm', label: 'Delivery DQM', icon: Truck },
+        { id: 'menu', label: 'Menu', icon: Menu },
+      ];
 
   // 3. MENU LAINNYA DALAM MOBILE DRAWER
-  // Kategori, Stok, Pelanggan, Pengeluaran, Laporan, Pengguna, QR Code, Pengaturan (+ Asisten AI)
   const drawerNavItems: Array<{
     id: ActiveTab;
     label: string;
@@ -118,16 +133,19 @@ export const Navigation: React.FC<NavigationProps> = ({
     badge?: number;
     badgeText?: string;
   }> = [
+    { id: 'delivery_dqm', label: 'Delivery DQM', icon: Truck, desc: 'Antrian & status pengantaran Pesantren DQM', badgeText: 'DQM' },
+    { id: 'products', label: 'Produk', icon: Package, desc: 'Kelola katalog makanan & minuman' },
     { id: 'categories', label: 'Kategori', icon: Tags, desc: 'Kelompok menu makanan & minuman' },
     { id: 'stock', label: 'Stok', icon: Layers, desc: 'Pantau sisa stok bahan & menu', badge: lowStockCount },
     { id: 'customers', label: 'Pelanggan', icon: Users, desc: 'Daftar langganan & histori' },
     { id: 'expenses', label: 'Pengeluaran', icon: Receipt, desc: 'Catat belanja bahan & operasional' },
     { id: 'reports', label: 'Laporan', icon: BarChart3, desc: 'Omset penjualan & laba rugi' },
-    { id: 'users', label: 'Pengguna', icon: UserCheck, desc: 'Kelola kasir & staf warung' },
-    { id: 'qrcode_order', label: 'QR Code', icon: QrCode, desc: 'Standee QR Takeaway & Delivery', badgeText: 'Scan' },
+    { id: 'users', label: 'Pengguna', icon: UserCheck, desc: 'Kelola kasir, kurir DQM & staf warung' },
+    { id: 'qrcode_order', label: 'QR Menu Warung Bang Kobra', icon: QrCode, desc: 'QR Menu Bungkus & Delivery DQM', badgeText: 'Scan' },
     { id: 'public_menu', label: 'Menu Online', icon: Globe, desc: 'Tautan menu web & pesanan WA', badgeText: 'Web' },
+    { id: 'menu_ads', label: 'Iklan Menu', icon: Megaphone, desc: 'Banner promo, diskon & running text', badgeText: 'Promo' },
     { id: 'login', label: 'Menu Login', icon: LogIn, desc: 'Portal masuk kasir & switch akun', badgeText: 'Akses' },
-    { id: 'settings', label: 'Pengaturan', icon: SettingsIcon, desc: 'Data warung, struk & printer' },
+    { id: 'settings', label: 'Pengaturan', icon: SettingsIcon, desc: 'Biaya Delivery DQM, data warung & struk' },
     { id: 'ai_bot', label: 'Asisten AI', icon: Bot, desc: 'Analisis cerdas Warung KobraBot', badgeText: 'AI' },
   ];
 
@@ -155,7 +173,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               onClick={() => handleSelectTab(item.id)}
               className={`w-full min-h-[44px] flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-sm font-extrabold transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-red-600 text-white shadow-lg shadow-red-950/60 border border-red-500/60 scale-[1.01]'
+                  ? 'bg-gradient-to-r from-amber-600 via-amber-500 to-orange-600 text-stone-950 font-black shadow-lg shadow-amber-950/60 border border-amber-400/50 scale-[1.01]'
                   : isAllowed
                   ? 'text-stone-300 hover:text-white hover:bg-stone-900 border border-transparent'
                   : 'text-stone-500 hover:text-stone-300 hover:bg-stone-900/50 border border-transparent opacity-75'
@@ -165,9 +183,9 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <Icon
                   className={`w-5 h-5 shrink-0 ${
                     isActive
-                      ? 'text-white'
+                      ? 'text-stone-950 stroke-[2.5]'
                       : isAllowed
-                      ? 'text-orange-500/80 group-hover:text-orange-400'
+                      ? 'text-amber-500 group-hover:text-amber-400'
                       : 'text-stone-500'
                   }`}
                 />
@@ -184,15 +202,17 @@ export const Navigation: React.FC<NavigationProps> = ({
                   </span>
                 )}
                 {item.badge && item.badge > 0 ? (
-                  <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-orange-500 text-stone-950 shadow-sm animate-pulse">
+                  <span className={`px-2 py-0.5 text-[10px] font-black rounded-full shadow-sm animate-pulse ${
+                    isActive ? 'bg-stone-950 text-amber-400' : 'bg-amber-500 text-stone-950'
+                  }`}>
                     {item.badge}
                   </span>
                 ) : item.badgeText ? (
                   <span
                     className={`px-2 py-0.5 text-[10px] font-black rounded-full uppercase ${
                       isActive
-                        ? 'bg-black text-orange-400'
-                        : 'bg-orange-500/20 text-orange-400 border border-orange-500/40'
+                        ? 'bg-stone-950/30 text-stone-950 border border-stone-950/20'
+                        : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
                     }`}
                   >
                     {item.badgeText}
@@ -206,42 +226,57 @@ export const Navigation: React.FC<NavigationProps> = ({
         {/* Sidebar Footer: Warung Brand & Active User Profile */}
         <div className="mt-auto pt-3 border-t border-stone-800 space-y-2">
           {currentUser && (
-            <button
-              type="button"
-              id="btn-sidebar-user-card"
-              onClick={onOpenProfile}
-              title="Klik untuk membuka Profil & Hak Akses"
-              className="w-full p-2.5 rounded-2xl bg-stone-900/90 hover:bg-stone-850 border border-stone-800 flex items-center justify-between transition cursor-pointer text-left group"
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-xl overflow-hidden bg-stone-800 border border-stone-700 shrink-0">
-                  {currentUser.avatar_url ? (
-                    <img
-                      src={currentUser.avatar_url}
-                      alt={currentUser.nama || 'User'}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center font-black text-stone-300 text-xs">
-                      {currentUser.nama?.charAt(0) || 'U'}
-                    </div>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-black text-stone-200 truncate group-hover:text-white">
-                    {currentUser.nama || 'Pengguna'}
-                  </p>
-                  <p className="text-[10px] text-stone-400 font-mono truncate">
-                    @{currentUser.username || 'user'}
-                  </p>
-                </div>
-              </div>
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-black border shrink-0 ${roleBadge.badgeBg} ${roleBadge.badgeText} ${roleBadge.badgeBorder}`}
+            <div className="space-y-1.5">
+              <button
+                type="button"
+                id="btn-sidebar-user-card"
+                onClick={onOpenProfile}
+                title="Klik untuk membuka Profil & Hak Akses"
+                className="w-full p-2.5 rounded-2xl bg-stone-900/90 hover:bg-stone-850 border border-stone-800 flex items-center justify-between transition cursor-pointer text-left group"
               >
-                {roleBadge.badge}
-              </span>
-            </button>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl overflow-hidden bg-stone-800 border border-stone-700 shrink-0">
+                    {currentUser.avatar_url ? (
+                      <img
+                        src={currentUser.avatar_url}
+                        alt={currentUser.nama || 'User'}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center font-black text-stone-300 text-xs">
+                        {currentUser.nama?.charAt(0) || 'U'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-stone-200 truncate group-hover:text-white">
+                      {currentUser.nama || 'Pengguna'}
+                    </p>
+                    <p className="text-[10px] text-stone-400 font-mono truncate">
+                      @{currentUser.username || 'user'}
+                    </p>
+                  </div>
+                </div>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black border shrink-0 ${roleBadge.badgeBg} ${roleBadge.badgeText} ${roleBadge.badgeBorder}`}
+                >
+                  {roleBadge.badge}
+                </span>
+              </button>
+
+              {onLockApp && (
+                <button
+                  type="button"
+                  id="btn-sidebar-lock-app"
+                  onClick={onLockApp}
+                  title="Kunci Layar Aplikasi POS"
+                  className="w-full min-h-[38px] flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-stone-900 hover:bg-amber-950/40 text-amber-400 hover:text-amber-300 border border-stone-800 hover:border-amber-700/50 text-xs font-bold transition cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Kunci Layar Aplikasi (POS)</span>
+                </button>
+              )}
+            </div>
           )}
 
           <div className="p-3 rounded-2xl bg-stone-900 border border-stone-800 space-y-2.5">
@@ -315,21 +350,21 @@ export const Navigation: React.FC<NavigationProps> = ({
               <div
                 className={`relative flex items-center justify-center w-10 h-7 rounded-xl transition-all ${
                   isCurrentActive
-                    ? 'bg-red-600 text-white shadow-md shadow-red-900/50'
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 shadow-md shadow-amber-950/60'
                     : isMenuTrigger && mobileDrawerOpen
-                    ? 'bg-stone-800 text-orange-400'
+                    ? 'bg-stone-800 text-amber-400'
                     : 'text-stone-400'
                 }`}
               >
-                <Icon className="w-5 h-5 shrink-0" />
+                <Icon className={`w-5 h-5 shrink-0 ${isCurrentActive ? 'stroke-[2.5]' : ''}`} />
                 {item.id === 'stock' && lowStockCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-orange-500 rounded-full animate-ping" />
+                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-500 rounded-full animate-ping" />
                 )}
               </div>
 
               <span
                 className={`text-[11px] font-black tracking-tight mt-0.5 truncate max-w-full ${
-                  isCurrentActive ? 'text-red-500 font-extrabold' : 'text-stone-400'
+                  isCurrentActive ? 'text-amber-400 font-extrabold' : 'text-stone-400'
                 }`}
               >
                 {item.label}
@@ -337,7 +372,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
               {/* Indicator dot */}
               {isCurrentActive && (
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 absolute bottom-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 absolute bottom-0.5" />
               )}
             </button>
           );
@@ -354,7 +389,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           <div
             id="mobile-navigation-drawer"
             onClick={(e) => e.stopPropagation()}
-            className="bg-stone-900 border-t-2 border-red-600/40 rounded-t-[32px] p-5 max-h-[85vh] overflow-y-auto space-y-4 shadow-2xl animate-in slide-in-from-bottom-5"
+            className="bg-stone-900 border-t-2 border-amber-500/50 rounded-t-[32px] p-5 max-h-[85vh] overflow-y-auto space-y-4 shadow-2xl animate-in slide-in-from-bottom-5"
           >
             {/* Drawer Header */}
             <div className="flex items-center justify-between pb-3 border-b border-stone-800">
@@ -431,9 +466,9 @@ export const Navigation: React.FC<NavigationProps> = ({
                     }}
                     className={`w-full min-h-[58px] flex items-center justify-between p-3.5 rounded-2xl text-left border-2 transition-all cursor-pointer active:scale-98 ${
                       isActive
-                        ? 'bg-red-600/20 border-red-600 text-white shadow-md'
+                        ? 'bg-amber-500/15 border-amber-500 text-white shadow-md'
                         : isAllowed
-                        ? 'bg-stone-950 hover:bg-stone-800/80 border-stone-800 text-stone-200'
+                        ? 'bg-stone-950 hover:bg-stone-850 border-stone-800 text-stone-200'
                         : 'bg-stone-950/60 hover:bg-stone-900 border-stone-850 text-stone-400 opacity-70'
                     }`}
                   >
@@ -441,9 +476,9 @@ export const Navigation: React.FC<NavigationProps> = ({
                       <div
                         className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                           isActive
-                            ? 'bg-red-600 text-white shadow-md shadow-red-900/40'
+                            ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-stone-950 shadow-md shadow-amber-950/50 font-bold'
                             : isAllowed
-                            ? 'bg-stone-900 text-orange-400 border border-stone-800'
+                            ? 'bg-stone-900 text-amber-400 border border-stone-800'
                             : 'bg-stone-900 text-stone-500 border border-stone-800'
                         }`}
                       >
@@ -468,11 +503,11 @@ export const Navigation: React.FC<NavigationProps> = ({
                           Terkunci
                         </span>
                       ) : item.badge && item.badge > 0 ? (
-                        <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-orange-500 text-stone-950 animate-pulse">
+                        <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-500 text-stone-950 animate-pulse">
                           {item.badge}
                         </span>
                       ) : item.badgeText ? (
-                        <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-red-600/30 text-red-400 border border-red-600/40 uppercase">
+                        <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40 uppercase">
                           {item.badgeText}
                         </span>
                       ) : (
@@ -488,6 +523,24 @@ export const Navigation: React.FC<NavigationProps> = ({
             <div className="pt-2 border-t border-stone-800">
               <PWAInstallButton variant="full" />
             </div>
+
+            {/* Kunci Layar POS in Drawer */}
+            {onLockApp && currentUser && (
+              <div className="pt-2 border-t border-stone-800">
+                <button
+                  type="button"
+                  id="btn-drawer-lock-app"
+                  onClick={() => {
+                    setMobileDrawerOpen(false);
+                    onLockApp();
+                  }}
+                  className="w-full min-h-[46px] flex items-center justify-center gap-2 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 text-amber-400 border border-amber-500/40 text-xs font-black transition cursor-pointer"
+                >
+                  <Lock className="w-4 h-4 text-amber-400" />
+                  <span>Kunci Layar Aplikasi (POS)</span>
+                </button>
+              </div>
+            )}
 
             {/* Quick Warung Logo Upload in Drawer */}
             {onOpenLogoEditor && role === 'ADMIN' && (

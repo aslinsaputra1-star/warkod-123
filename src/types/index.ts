@@ -5,10 +5,29 @@ export type UserRole =
   | 'Admin'
   | 'Kasir'
   | 'Staff'
+  | 'Delivery'
   | 'Customer'
   | 'ADMIN'
-  | 'KASIR';
+  | 'KASIR'
+  | 'DELIVERY';
 export type ExpenseCategory = 'Pembelian bahan' | 'Listrik' | 'Gas' | 'Operasional' | 'Gaji' | 'Lainnya';
+
+export type OrderType = 'BUNGKUS' | 'DELIVERY_DQM';
+
+export type DeliveryStatus =
+  | 'MENUNGGU'
+  | 'DIPROSES'
+  | 'SIAP DIANTAR'
+  | 'DIANTAR'
+  | 'SELESAI'
+  | 'DIBATALKAN';
+
+export type OrderQueueStatus =
+  | 'MENUNGGU'
+  | 'DIPROSES'
+  | 'SIAP'
+  | 'SELESAI'
+  | 'DIBATALKAN';
 
 export interface Product {
   id: string;
@@ -60,10 +79,28 @@ export interface Transaction {
   metode_pembayaran: PaymentMethod;
   uang_diterima: number;
   kembalian: number;
-  status: 'Selesai' | 'Dibatalkan' | 'Pending' | 'Diproses';
+  status:
+    | 'Selesai'
+    | 'Dibatalkan'
+    | 'Pending'
+    | 'Diproses'
+    | 'Siap'
+    | 'MENUNGGU'
+    | 'DIPROSES'
+    | 'SIAP'
+    | 'SELESAI'
+    | 'DIBATALKAN';
   items: TransactionDetail[];
   created_at: string;
-  tipe_pesanan?: 'Takeaway' | 'Delivery' | 'Dine In';
+  orderType?: OrderType;
+  deliveryArea?: 'DQM' | null;
+  deliveryLocation?: string | null;
+  deliveryDetail?: string | null;
+  deliveryNote?: string | null;
+  deliveryFee?: number;
+  deliveryStatus?: DeliveryStatus | null;
+  queueNumber?: string;
+  tipe_pesanan?: 'BUNGKUS' | 'DELIVERY_DQM' | 'Takeaway' | 'Delivery';
   alamat_pengantaran?: string;
   catatan_pesanan?: string;
 }
@@ -144,6 +181,20 @@ export interface StoreSettings {
   onlineMenuIsOpen?: boolean;
   onlineMenuAnnouncement?: string;
   onlineMenuMinOrder?: number;
+  deliveryDqmEnabled?: boolean;
+  deliveryFeeType?: 'FREE' | 'FIXED';
+  deliveryFeeAmount?: number;
+  deliveryDqmNote?: string;
+  menuAdActive?: boolean;
+  menuAdTitle?: string;
+  menuAdText?: string;
+  menuAdBadge?: string;
+  menuAdDiscountPercent?: number;
+  menuAdTargetCategory?: string;
+  menuAdTargetProductId?: string;
+  menuAdButtonText?: string;
+  menuAdTheme?: 'fire' | 'amber' | 'emerald' | 'purple';
+  menuAdImageUrl?: string;
 }
 
 export interface SyncState {
@@ -158,6 +209,7 @@ export type ActiveTab =
   | 'dashboard'
   | 'pos'
   | 'orders'
+  | 'delivery_dqm'
   | 'whatsapp_order'
   | 'products'
   | 'categories'
@@ -168,6 +220,7 @@ export type ActiveTab =
   | 'users'
   | 'qrcode_order'
   | 'public_menu'
+  | 'menu_ads'
   | 'login'
   | 'settings'
   | 'ai_bot';

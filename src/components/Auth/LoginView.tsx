@@ -401,6 +401,58 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </div>
               </div>
 
+              {/* Quick Login Shortcut for Instant Access */}
+              <div className="p-4 rounded-2xl bg-stone-950 border border-stone-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-amber-300 flex items-center gap-2">
+                    <Crown className="w-4 h-4 text-amber-400" />
+                    Pilih Cepat Akun Karyawan / Pemilik
+                  </span>
+                  <span className="text-[10px] text-stone-400 font-medium">1-Klik Langsung Masuk</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {users.filter(u => ['Owner', 'Admin', 'Kasir', 'Staff'].includes(u.role)).map((u) => {
+                    const badge = getRoleBadgeInfo(u.role);
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => {
+                          StorageService.setAuthUser(u);
+                          onLoginSuccess(u);
+                          showToast(`Berhasil masuk sebagai ${u.nama}!`, 'success');
+                          if (onNavigate) {
+                            onNavigate(getDefaultTabForRole(u.role));
+                          }
+                        }}
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-stone-900 hover:bg-stone-850 active:scale-98 border border-stone-800 hover:border-amber-500/40 text-left transition cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-stone-800 border border-stone-700 overflow-hidden shrink-0 flex items-center justify-center text-xs font-black text-amber-400">
+                            {u.avatar_url ? (
+                              <img src={u.avatar_url} alt={u.nama} className="w-full h-full object-cover" />
+                            ) : (
+                              u.nama.charAt(0)
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-bold text-stone-200 truncate group-hover:text-amber-300 transition">
+                              {u.nama}
+                            </p>
+                            <p className="text-[10px] text-stone-400 font-mono">
+                              PIN: {u.pin}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md border ${badge.badgeBg} ${badge.badgeText} ${badge.badgeBorder} shrink-0`}>
+                          {badge.badge}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="relative flex items-center justify-center">
                 <div className="border-t border-stone-800 w-full" />
                 <span className="bg-stone-900 px-3 text-[11px] font-bold text-stone-500 uppercase tracking-wider absolute">
@@ -420,7 +472,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                       id="input-login-view-identifier"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="Masukkan Username atau Email Staf..."
+                      placeholder="Contoh: owner, kasir, 0812..., atau rayyan@..."
                       className="w-full min-h-[48px] bg-stone-950 border-2 border-stone-800 focus:border-red-500 rounded-2xl px-4 pl-11 text-white text-sm outline-none transition"
                       required
                     />

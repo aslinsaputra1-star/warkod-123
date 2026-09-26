@@ -144,19 +144,26 @@ export const AIBotView: React.FC<AIBotViewProps> = ({
   };
 
   const handleClearHistory = () => {
-    if (window.confirm('Hapus seluruh riwayat obrolan dengan KobraBot?')) {
-      const initial: ChatMessage[] = [
-        {
-          id: 'msg-welcome',
-          role: 'assistant',
-          content: `Halo Juragan! Riwayat percakapan telah dibersihkan. Ada yang bisa KobraBot bantu untuk operasional **${settings.storeName}** hari ini?`,
-          timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        },
-      ];
-      setMessages(initial);
-      localStorage.removeItem('kobra_ai_chat_history');
-      showToast('Riwayat obrolan AI berhasil direset.', 'info');
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm('Hapus seluruh riwayat obrolan dengan KobraBot?')) {
+          return;
+        }
+      }
+    } catch {
+      // Continue if restricted
     }
+    const initial: ChatMessage[] = [
+      {
+        id: 'msg-welcome',
+        role: 'assistant',
+        content: `Halo Juragan! Riwayat percakapan telah dibersihkan. Ada yang bisa KobraBot bantu untuk operasional **${settings.storeName}** hari ini?`,
+        timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      },
+    ];
+    setMessages(initial);
+    localStorage.removeItem('kobra_ai_chat_history');
+    showToast('Riwayat obrolan AI berhasil direset.', 'info');
   };
 
   // Preset quick prompt chips

@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
@@ -20,6 +21,8 @@ function getAIClient(): GoogleGenAI {
 
 async function startServer() {
   const app = express();
+  // In AI Studio Cloud Run, Nginx reverse proxy listens on port 8080 and forwards to port 3000.
+  // The app server MUST listen on port 3000 (never bind to 8080 which conflicts with Nginx).
   const PORT = 3000;
 
   app.use(express.json({ limit: "10mb" }));
@@ -147,19 +150,22 @@ ${lowStockAlerts}`;
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
+  // Vite middleware for development or static serving for production
+  const distPath = path.join(process.cwd(), "dist");
+  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
+  const isProduction = process.env.NODE_ENV === "production" || (hasDist && process.env.NODE_ENV !== "development");
+
+  if (isProduction && hasDist) {
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
+  } else {
+    const vite = await createViteServer({
+      server: { middlewareMode: true, hmr: false },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
   }
 
   app.listen(PORT, "0.0.0.0", () => {

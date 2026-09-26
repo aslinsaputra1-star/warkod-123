@@ -26,13 +26,19 @@ import {
   Radio,
   BellRing,
 } from 'lucide-react';
-import { Product, StoreSettings, Transaction } from '../../types';
+import { Product, StoreSettings, Transaction, OrderType, OrderQueueStatus, DeliveryStatus } from '../../types';
 import {
   formatRupiah,
   sanitizeWhatsAppNumber,
   buildOnlineQRCodeOrderWhatsAppMessage,
   openWhatsAppChat,
   getTakeawayQueueNumber,
+  DQM_LOCATIONS,
+  calculateDeliveryDqmFee,
+  normalizeOrderQueueStatus,
+  normalizeDeliveryStatus,
+  getOrderStatusLabel,
+  getDeliveryStatusLabel,
 } from '../../utils/formatters';
 import { StorageService } from '../../services/storage';
 import { saveOrderToFirebase, db } from '../../services/firebase';
@@ -42,7 +48,7 @@ import { BrandLogo } from '../Common/BrandLogo';
 interface CustomerOrderViewProps {
   products: Product[];
   settings: StoreSettings;
-  initialOrderType?: 'Takeaway' | 'Delivery';
+  initialOrderType?: 'Takeaway' | 'Delivery' | 'BUNGKUS' | 'DELIVERY_DQM';
   onBackToApp?: () => void;
   onOrderCreated?: (transaction: Transaction) => void;
   showToast?: (msg: string, type?: 'success' | 'error' | 'info') => void;
@@ -57,20 +63,27 @@ export interface CartEntry {
 export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
   products,
   settings,
-  initialOrderType = 'Takeaway',
+  initialOrderType = 'BUNGKUS',
   onBackToApp,
   onOrderCreated,
   showToast,
 }) => {
-  // Mode: Takeaway or Delivery
-  const [orderType, setOrderType] = useState<'Takeaway' | 'Delivery'>(initialOrderType);
+  // Mode: BUNGKUS or DELIVERY_DQM
+  const [orderType, setOrderType] = useState<OrderType>(() => {
+    if (initialOrderType === 'Delivery' || initialOrderType === 'DELIVERY_DQM') {
+      return 'DELIVERY_DQM';
+    }
+    return 'BUNGKUS';
+  });
 
   // Customer Form
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [pickupTime, setPickupTime] = useState('Sekitar 15-20 menit lagi');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [deliveryLandmark, setDeliveryLandmark] = useState('');
+  const [selectedAreaOption, setSelectedAreaOption] = useState<'DQM' | 'OUTSIDE'>('DQM');
+  const [deliveryLocation, setDeliveryLocation] = useState<string>(DQM_LOCATIONS[0]);
+  const [deliveryDetail, setDeliveryDetail] = useState('');
+  const [deliveryNote, setDeliveryNote] = useState('');
   const [generalNotes, setGeneralNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Transfer' | 'QRIS'>('Cash');
 
@@ -86,7 +99,8 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
   const [activeNoteItemId, setActiveNoteItemId] = useState<string | null>(null);
   const [tempNoteText, setTempNoteText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [liveStatus, setLiveStatus] = useState<'Pending' | 'Diproses' | 'Selesai' | 'Dibatalkan'>('Pending');
+  const [liveStatus, setLiveStatus] = useState<OrderQueueStatus>('MENUNGGU');
+  const [liveDeliveryStatus, setLiveDeliveryStatus] = useState<DeliveryStatus>('MENUNGGU');
   const [completedOrder, setCompletedOrder] = useState<{
     orderId: string;
     total: number;
@@ -103,8 +117,11 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
       const unsubscribe = onSnapshot(orderRef, (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          if (data?.status && data.status !== liveStatus) {
-            setLiveStatus(data.status as 'Pending' | 'Diproses' | 'Selesai' | 'Dibatalkan');
+          if (data?.status) {
+            setLiveStatus(normalizeOrderQueueStatus(data.status));
+          }
+          if (data?.deliveryStatus) {
+            setLiveDeliveryStatus(normalizeDeliveryStatus(data.deliveryStatus, data.status));
           }
         }
       });
@@ -112,7 +129,7 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
     } catch (err) {
       console.warn('Realtime order listener error:', err);
     }
-  }, [completedOrder?.orderId, liveStatus]);
+  }, [completedOrder?.orderId]);
 
   // Only active products with stock > 0 (or show out of stock state)
   const activeProducts = useMemo(() => {
@@ -147,8 +164,8 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
     0
   );
   
-  // Delivery fee (standard Rp5.000 for delivery if address provided, or Rp0 for takeaway)
-  const deliveryFee: number = orderType === 'Delivery' ? 5000 : 0;
+  // Delivery fee configured by Owner in Settings -> Delivery DQM
+  const deliveryFee: number = calculateDeliveryDqmFee(settings, orderType);
   const grandTotal: number = cartSubtotal + deliveryFee;
 
   // Add / Remove from Cart
@@ -222,16 +239,25 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
       return;
     }
 
-    if (orderType === 'Delivery' && !deliveryAddress.trim()) {
-      if (showToast) showToast('Silakan isi Alamat Pengantaran untuk pesanan Delivery!', 'error');
-      setIsCartOpen(true);
-      return;
+    if (orderType === 'DELIVERY_DQM') {
+      if (selectedAreaOption !== 'DQM') {
+        if (showToast) showToast('Delivery hanya tersedia untuk area Pesantren DQM.', 'error');
+        setIsCartOpen(true);
+        return;
+      }
+      if (!deliveryLocation.trim() || !deliveryDetail.trim()) {
+        if (showToast) {
+          showToast('Silakan lengkapi Lokasi DQM dan Detail Lokasi (Kamar/Asrama)!', 'error');
+        }
+        setIsCartOpen(true);
+        return;
+      }
     }
 
     setIsSubmitting(true);
 
-    // Generate Order ID (Prefix: TKW for Takeaway, DLV for Delivery)
-    const prefix = orderType === 'Takeaway' ? 'TKW' : 'DLV';
+    const isDelivery = orderType === 'DELIVERY_DQM';
+    const prefix = isDelivery ? 'DQM' : 'BKS';
     const orderId = StorageService.generateInvoiceNumber(prefix);
 
     const now = new Date();
@@ -250,30 +276,43 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
       catatan: item.notes || undefined,
     }));
 
-    // Build Transaction object to store into Warung POS
+    const combinedNote = isDelivery
+      ? deliveryNote.trim() || generalNotes.trim()
+      : generalNotes.trim();
+
+    // Build Transaction object to store into Warung POS (Section 9 Database Order specification)
     const newTx: Transaction = {
       id_transaksi: orderId,
       tanggal,
       jam,
-      kasir: 'Online QR Self-Order',
+      kasir: 'QR Menu Warung Bang Kobra',
       nama_pelanggan: customerName.trim(),
       no_whatsapp: sanitizeWhatsAppNumber(customerPhone.trim()),
       subtotal: cartSubtotal,
       diskon: 0,
-      biaya: deliveryFee,
+      biaya: isDelivery ? deliveryFee : 0,
       total: grandTotal,
       metode_pembayaran: paymentMethod,
       uang_diterima: 0,
       kembalian: 0,
-      status: 'Pending',
+      status: 'MENUNGGU',
       items: itemsFormatted,
       created_at: now.toISOString(),
+      orderType: orderType,
       tipe_pesanan: orderType,
-      alamat_pengantaran: orderType === 'Delivery' ? `${deliveryAddress} (${deliveryLandmark})` : undefined,
-      catatan_pesanan: generalNotes || undefined,
+      deliveryArea: isDelivery ? 'DQM' : null,
+      deliveryLocation: isDelivery ? deliveryLocation.trim() : null,
+      deliveryDetail: isDelivery ? deliveryDetail.trim() : null,
+      deliveryNote: isDelivery ? combinedNote : null,
+      deliveryFee: isDelivery ? deliveryFee : 0,
+      deliveryStatus: isDelivery ? 'MENUNGGU' : null,
+      alamat_pengantaran: isDelivery
+        ? `Pesantren DQM - ${deliveryLocation.trim()} (${deliveryDetail.trim()})`
+        : undefined,
+      catatan_pesanan: combinedNote || undefined,
     };
 
-    // 1. Send Order to Firebase Firestore (CHECKOUT -> FIREBASE)
+    // 1. Send Order to Firebase Firestore (CHECKOUT -> FIREBASE -> ANTRIAN KASIR)
     const fbResult = await saveOrderToFirebase(newTx);
     if (fbResult.success) {
       console.log('Pesanan berhasil tersimpan di Firebase Firestore:', orderId);
@@ -294,8 +333,8 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
     // Build WhatsApp message
     const paymentLabel =
       paymentMethod === 'Cash'
-        ? orderType === 'Delivery'
-          ? 'Bayar di Tempat / COD (Tunai ke Kurir)'
+        ? isDelivery
+          ? 'Bayar Tunai saat Diantar (COD DQM)'
           : 'Bayar Tunai di Kasir saat Ambil'
         : paymentMethod === 'Transfer'
         ? 'Transfer Bank'
@@ -307,12 +346,13 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
       orderType,
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
-      pickupTime: orderType === 'Takeaway' ? pickupTime : undefined,
-      deliveryAddress: orderType === 'Delivery' ? deliveryAddress.trim() : undefined,
-      deliveryLandmark: orderType === 'Delivery' ? deliveryLandmark.trim() : undefined,
-      deliveryFee: deliveryFee > 0 ? deliveryFee : undefined,
+      pickupTime: !isDelivery ? pickupTime : undefined,
+      deliveryArea: isDelivery ? 'DQM' : null,
+      deliveryLocation: isDelivery ? deliveryLocation.trim() : null,
+      deliveryDetail: isDelivery ? deliveryDetail.trim() : null,
+      deliveryFee: isDelivery ? deliveryFee : 0,
       paymentMethod: paymentLabel,
-      notes: generalNotes.trim(),
+      notes: combinedNote,
       items: cartItems.map((item) => ({
         name: item.product.nama,
         qty: item.qty,
@@ -323,7 +363,8 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
       total: grandTotal,
     });
 
-    setLiveStatus('Pending');
+    setLiveStatus('MENUNGGU');
+    setLiveDeliveryStatus('MENUNGGU');
     setCompletedOrder({
       orderId,
       total: grandTotal,
@@ -335,7 +376,7 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
     setIsCartOpen(false);
 
     if (showToast) {
-      showToast('Pesanan berhasil terkirim ke Firebase & Kasir Warung!', 'success');
+      showToast('Pesanan berhasil terkirim ke ANTRIAN KASIR Warung Bang Kobra!', 'success');
     }
   };
 
@@ -374,6 +415,19 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
               </p>
             </div>
           </div>
+
+          {onBackToApp && (
+            <button
+              type="button"
+              id="btn-customer-back-to-pos"
+              onClick={onBackToApp}
+              title="Kembali ke Menu Utama (POS)"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs shadow-md shadow-red-950/50 hover:scale-105 active:scale-95 transition cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Menu Utama (POS)</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -385,72 +439,83 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
             <div>
               <div className="flex flex-wrap items-center gap-1.5 mb-1">
                 <span className="text-[10px] font-extrabold tracking-widest text-amber-400 uppercase bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                  Menu Pesan Mandiri
+                  QR MENU WARUNG BANG KOBRA
                 </span>
                 <span className="text-[10px] font-extrabold tracking-wide text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1">
-                  <span>📱</span>
-                  <span>Tanpa Perlu Instal Aplikasi</span>
+                  <span>BUNGKUS &amp; DELIVERY DQM</span>
                 </span>
               </div>
               <h2 className="text-lg sm:text-xl font-black text-stone-100 mt-1">
-                Pesan Cukup Arahkan Kamera ke QR
+                Pesan Menu Favorit — BUNGKUS atau DELIVERY DQM
               </h2>
               <p className="text-xs text-stone-400 mt-0.5">
-                Pilih menu favorit Anda langsung di browser HP tanpa install aplikasi. Pesanan langsung masuk ke kasir!
+                Pilih produk, masuk ke keranjang, lalu pilih jenis pesanan BUNGKUS atau DELIVERY DQM. Pesanan langsung masuk ke ANTRIAN KASIR!
               </p>
             </div>
           </div>
 
-          {/* Service Switcher: Takeaway vs Delivery */}
+          {/* Service Switcher: BUNGKUS vs DELIVERY DQM */}
           <div className="grid grid-cols-2 gap-2 p-1.5 bg-stone-950 rounded-2xl border border-stone-800">
             <button
               type="button"
               id="btn-select-takeaway"
-              onClick={() => setOrderType('Takeaway')}
+              onClick={() => setOrderType('BUNGKUS')}
               className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-extrabold text-xs transition cursor-pointer ${
-                orderType === 'Takeaway'
+                orderType === 'BUNGKUS'
                   ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-stone-950 shadow-md shadow-amber-950/40'
                   : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
               }`}
             >
               <ShoppingBag className="w-4 h-4" />
-              <span>Takeaway (Bungkus)</span>
+              <span>BUNGKUS</span>
             </button>
 
             <button
               type="button"
               id="btn-select-delivery"
-              onClick={() => setOrderType('Delivery')}
+              onClick={() => setOrderType('DELIVERY_DQM')}
               className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-extrabold text-xs transition cursor-pointer ${
-                orderType === 'Delivery'
+                orderType === 'DELIVERY_DQM'
                   ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-stone-950 shadow-md shadow-amber-950/40'
                   : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
               }`}
             >
               <Bike className="w-4 h-4" />
-              <span>Delivery (Pesan Antar)</span>
+              <span>DELIVERY DQM</span>
             </button>
           </div>
 
           {/* Quick Notice Info */}
-          <div className="flex items-center gap-2 text-[11px] text-stone-400 bg-stone-950/60 p-2.5 rounded-xl border border-stone-800/80">
-            {orderType === 'Takeaway' ? (
+          <div className="flex items-center gap-2 text-[11px] text-stone-300 bg-stone-950/60 p-2.5 rounded-xl border border-stone-800/80">
+            {orderType === 'BUNGKUS' ? (
               <>
                 <Store className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  Ambil sendiri di warung: <strong className="text-stone-200">{settings.storeAddress || 'Alamat Warung'}</strong>. Bebas antre kasir!
+                  <strong className="text-amber-400">[BUNGKUS]:</strong> Pesanan akan disiapkan untuk diambil di{' '}
+                  <strong className="text-stone-200">{settings.address || settings.storeAddress || 'Warung Bang Kobra'}</strong>.
                 </span>
               </>
             ) : (
               <>
                 <Bike className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>
-                  Pesanan diantar kurir ke alamat Anda. Ongkir standar mulai Rp5.000.
+                  <strong className="text-emerald-400">[DELIVERY DQM]:</strong> Delivery hanya tersedia di area Pesantren DQM.{' '}
+                  <strong>
+                    {deliveryFee > 0 ? `Biaya Delivery DQM: ${formatRupiah(deliveryFee)}` : 'Delivery DQM: GRATIS'}
+                  </strong>
                 </span>
               </>
             )}
           </div>
         </div>
+
+        {/* Store Announcement if configured */}
+        {(settings.onlineMenuBannerText || settings.onlineMenuAnnouncement) && (
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center gap-2 text-xs text-amber-300">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-semibold">{settings.onlineMenuBannerText || settings.onlineMenuAnnouncement}</span>
+          </div>
+        )}
 
         {/* Search & Categories */}
         <div className="space-y-2.5">
@@ -480,10 +545,10 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1.5 rounded-xl whitespace-nowrap font-bold text-xs transition cursor-pointer ${
+                className={`px-3.5 py-1.5 rounded-xl whitespace-nowrap font-bold text-xs transition-all duration-200 cursor-pointer active:scale-95 ${
                   selectedCategory === cat
-                    ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-950/40'
-                    : 'bg-stone-900 text-stone-400 hover:bg-stone-800 hover:text-stone-200 border border-stone-800'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-stone-950 shadow-md shadow-amber-950/40 scale-105 animate-pop-in'
+                    : 'bg-stone-900 text-stone-400 hover:bg-stone-850 hover:text-stone-200 border border-stone-800'
                 }`}
               >
                 {cat}
@@ -584,7 +649,7 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleAddToCart(product)}
-                          className="flex items-center gap-1 bg-amber-500/15 hover:bg-amber-500 text-amber-400 hover:text-stone-950 border border-amber-500/30 font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer"
+                          className="flex items-center gap-1 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500 hover:to-orange-500 text-amber-400 hover:text-stone-950 border border-amber-500/40 font-extrabold text-xs px-3.5 py-1.5 rounded-xl transition-all duration-200 cursor-pointer active:scale-80 hover:scale-105 shadow-sm"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Pesan</span>
@@ -638,7 +703,7 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
                 </div>
                 <div className="text-left">
                   <p className="text-xs font-extrabold uppercase tracking-wider text-stone-950">
-                    {orderType === 'Takeaway' ? 'Takeaway (Bungkus)' : 'Delivery (Pesan Antar)'}
+                    {orderType === 'BUNGKUS' ? '[BUNGKUS]' : '[DELIVERY DQM]'}
                   </p>
                   <p className="text-[11px] text-stone-900/80 font-medium">
                     {totalCartCount} Menu Dipilih
@@ -671,7 +736,7 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
             <div className="p-4 bg-stone-950 border-b border-stone-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold">
-                  {orderType === 'Takeaway' ? (
+                  {orderType === 'BUNGKUS' ? (
                     <ShoppingBag className="w-4 h-4" />
                   ) : (
                     <Bike className="w-4 h-4" />
@@ -679,12 +744,12 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
                 </div>
                 <div>
                   <h3 className="font-extrabold text-sm sm:text-base text-stone-100">
-                    Keranjang & Konfirmasi Pesanan
+                    Checkout Pesanan Warung Bang Kobra
                   </h3>
                   <p className="text-[11px] text-stone-400">
-                    Layanan:{' '}
+                    Jenis Pesanan:{' '}
                     <strong className="text-amber-400">
-                      {orderType === 'Takeaway' ? 'Takeaway (Bungkus)' : 'Delivery (Pesan Antar)'}
+                      {orderType === 'BUNGKUS' ? '[BUNGKUS]' : '[DELIVERY DQM]'}
                     </strong>
                   </p>
                 </div>
@@ -700,11 +765,63 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
 
             {/* Modal Scrollable Content */}
             <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1">
+              {/* Section 10: PILIH JENIS PESANAN */}
+              <div className="bg-stone-950 p-3.5 rounded-2xl border border-stone-800 space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-amber-400">
+                  PILIH JENIS PESANAN
+                </h4>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setOrderType('BUNGKUS')}
+                    className={`p-3 rounded-xl border text-left transition flex items-center gap-2.5 cursor-pointer ${
+                      orderType === 'BUNGKUS'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-black'
+                        : 'bg-stone-900 border-stone-800 text-stone-400 hover:text-stone-200'
+                    }`}
+                  >
+                    <span className="text-sm">{orderType === 'BUNGKUS' ? '◉' : '○'}</span>
+                    <div>
+                      <div className="text-xs font-black">BUNGKUS</div>
+                      <div className="text-[10px] opacity-80">Ambil di Warung</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setOrderType('DELIVERY_DQM')}
+                    className={`p-3 rounded-xl border text-left transition flex items-center gap-2.5 cursor-pointer ${
+                      orderType === 'DELIVERY_DQM'
+                        ? 'bg-teal-500/20 border-teal-500 text-teal-300 font-black'
+                        : 'bg-stone-900 border-stone-800 text-stone-400 hover:text-stone-200'
+                    }`}
+                  >
+                    <span className="text-sm">{orderType === 'DELIVERY_DQM' ? '◉' : '○'}</span>
+                    <div>
+                      <div className="text-xs font-black">DELIVERY DQM</div>
+                      <div className="text-[10px] opacity-80">Khusus Pesantren DQM</div>
+                    </div>
+                  </button>
+                </div>
+
+                {orderType === 'BUNGKUS' ? (
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 font-bold flex items-center gap-2">
+                    <ShoppingBag className="w-4 h-4 shrink-0" />
+                    <span>Pesanan akan disiapkan untuk diambil.</span>
+                  </div>
+                ) : (
+                  <div className="p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/30 text-xs text-teal-300 font-bold flex items-center gap-2">
+                    <Bike className="w-4 h-4 shrink-0" />
+                    <span>Delivery hanya tersedia di area Pesantren DQM.</span>
+                  </div>
+                )}
+              </div>
+
               {/* Customer Info Form */}
               <div className="bg-stone-950 p-3.5 rounded-2xl border border-stone-800 space-y-3">
                 <h4 className="text-xs font-bold text-stone-200 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-                  Informasi Pemesan
+                  Data Pemesan ({orderType === 'BUNGKUS' ? 'BUNGKUS' : 'DELIVERY DQM'})
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -714,7 +831,7 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
                     </label>
                     <input
                       type="text"
-                      placeholder="Contoh: Budi Santoso"
+                      placeholder="Contoh: Ahmad"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -723,11 +840,11 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
 
                   <div>
                     <label className="text-[11px] text-stone-400 block mb-1 font-semibold">
-                      No. WhatsApp Aktif <span className="text-rose-400">*</span>
+                      Nomor WhatsApp <span className="text-rose-400">*</span>
                     </label>
                     <input
                       type="tel"
-                      placeholder="Contoh: 08123456789"
+                      placeholder="Contoh: 08xxxxxxxxxx"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
@@ -735,46 +852,104 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
                   </div>
                 </div>
 
-                {/* Conditional Fields based on Takeaway or Delivery */}
-                {orderType === 'Takeaway' ? (
+                {/* Conditional Fields based on BUNGKUS or DELIVERY_DQM */}
+                {orderType === 'BUNGKUS' ? (
                   <div>
                     <label className="text-[11px] text-stone-400 block mb-1 font-semibold">
-                      Perkiraan Waktu Ambil di Warung
+                      Perkiraan Jam Ambil (Opsional)
                     </label>
                     <input
                       type="text"
-                      placeholder="Contoh: Sekitar 15-20 menit lagi / Pukul 18.30"
+                      placeholder="Contoh: Sekitar 15-20 menit lagi"
                       value={pickupTime}
                       onChange={(e) => setPickupTime(e.target.value)}
                       className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
                     />
                   </div>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3 pt-1">
+                    {/* Area Validation Selector */}
                     <div>
                       <label className="text-[11px] text-stone-400 block mb-1 font-semibold">
-                        Alamat Pengantaran Lengkap <span className="text-rose-400">*</span>
+                        Area Pengantaran <span className="text-rose-400">*</span>
                       </label>
-                      <textarea
-                        rows={2}
-                        placeholder="Nama jalan, nomor rumah, RT/RW, kelurahan..."
-                        value={deliveryAddress}
-                        onChange={(e) => setDeliveryAddress(e.target.value)}
-                        className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAreaOption('DQM')}
+                          className={`p-2.5 rounded-xl border text-xs font-extrabold transition cursor-pointer ${
+                            selectedAreaOption === 'DQM'
+                              ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                              : 'bg-stone-900 border-stone-800 text-stone-400'
+                          }`}
+                        >
+                          ✅ Area: PESANTREN DQM
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedAreaOption('OUTSIDE')}
+                          className={`p-2.5 rounded-xl border text-xs font-extrabold transition cursor-pointer ${
+                            selectedAreaOption === 'OUTSIDE'
+                              ? 'bg-rose-500/20 border-rose-500 text-rose-300'
+                              : 'bg-stone-900 border-stone-800 text-stone-400'
+                          }`}
+                        >
+                          ❌ Di Luar Pesantren DQM
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[11px] text-stone-400 block mb-1 font-semibold">
-                        Patokan Rumah / Lokasi
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: Pagar hitam depan lapangan bola / Samping toko roti"
-                        value={deliveryLandmark}
-                        onChange={(e) => setDeliveryLandmark(e.target.value)}
-                        className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
+
+                    {selectedAreaOption === 'OUTSIDE' ? (
+                      <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-500 text-rose-200 text-xs font-extrabold flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>Delivery hanya tersedia untuk area Pesantren DQM.</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <label className="text-[11px] text-stone-400 block mb-1 font-semibold">
+                            Lokasi DQM (Asrama / Blok / Gedung) <span className="text-rose-400">*</span>
+                          </label>
+                          <select
+                            value={deliveryLocation}
+                            onChange={(e) => setDeliveryLocation(e.target.value)}
+                            className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                          >
+                            {DQM_LOCATIONS.map((loc) => (
+                              <option key={loc} value={loc}>
+                                {loc}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] text-stone-400 block mb-1 font-semibold">
+                            Detail Lokasi (Kamar / Blok / Lantai) <span className="text-rose-400">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Contoh: Kamar 12 / Blok B Lantai 2"
+                            value={deliveryDetail}
+                            onChange={(e) => setDeliveryDetail(e.target.value)}
+                            className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] text-stone-400 block mb-1 font-semibold">
+                            Catatan Pengantaran
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Contoh: Antar setelah Maghrib"
+                            value={deliveryNote}
+                            onChange={(e) => setDeliveryNote(e.target.value)}
+                            className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -903,10 +1078,12 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
                   <span>Subtotal Menu</span>
                   <span>{formatRupiah(cartSubtotal)}</span>
                 </div>
-                {orderType === 'Delivery' && (
+                {orderType === 'DELIVERY_DQM' && (
                   <div className="flex justify-between text-stone-400">
-                    <span>Biaya Pengantaran (Ongkir)</span>
-                    <span>{formatRupiah(deliveryFee)}</span>
+                    <span>Biaya Delivery DQM</span>
+                    <span className="font-bold text-emerald-400">
+                      {deliveryFee > 0 ? formatRupiah(deliveryFee) : 'GRATIS'}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between text-stone-100 font-extrabold text-sm pt-2 border-t border-stone-800">
@@ -929,19 +1106,19 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
               <button
                 type="button"
                 id="btn-submit-order-whatsapp"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (orderType === 'DELIVERY_DQM' && selectedAreaOption === 'OUTSIDE')}
                 onClick={handleSubmitOrder}
-                className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-500 hover:to-orange-500 text-white font-extrabold text-xs shadow-lg shadow-red-950/40 transition active:scale-95 cursor-pointer disabled:opacity-50"
+                className="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-500 hover:to-orange-500 text-white font-extrabold text-xs shadow-lg shadow-red-950/40 transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Mengirim ke Firebase & Kasir...</span>
+                    <span>Mengirim ke ANTRIAN KASIR...</span>
                   </>
                 ) : (
                   <>
                     <Send className="w-4 h-4" />
-                    <span>Checkout & Kirim ke Kasir</span>
+                    <span>Kirim Pesanan ({orderType === 'BUNGKUS' ? 'BUNGKUS' : 'DELIVERY DQM'})</span>
                   </>
                 )}
               </button>
@@ -1025,34 +1202,42 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
               </div>
             </div>
 
-            {orderType === 'Takeaway' && (
-              <div className="p-4 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border-2 border-amber-500/60 rounded-2xl text-center space-y-1 shadow-lg shadow-amber-950/40 animate-in zoom-in-95">
-                <div className="flex items-center justify-center gap-1.5 text-[11px] uppercase font-black tracking-widest text-amber-400">
-                  <BellRing className="w-4 h-4 animate-bounce text-amber-400" />
-                  <span>NOMOR ANTRIAN TAKEAWAY ANDA</span>
-                </div>
-                <div className="text-4xl font-black text-white font-mono tracking-widest py-1 drop-shadow-md">
-                  {getTakeawayQueueNumber(completedOrder.createdOrder)}
-                </div>
-                <p className="text-[11px] text-stone-300">
-                  Simpan nomor ini. Kasir/speaker warung akan memanggil nomor ini saat pesanan selesai dibungkus.
-                </p>
+            <div className="p-4 bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border-2 border-amber-500/60 rounded-2xl text-center space-y-1 shadow-lg shadow-amber-950/40 animate-in zoom-in-95">
+              <div className="flex items-center justify-center gap-1.5 text-[11px] uppercase font-black tracking-widest text-amber-400">
+                <BellRing className="w-4 h-4 animate-bounce text-amber-400" />
+                <span>NOMOR ANTRIAN KASIR ANDA</span>
               </div>
-            )}
+              <div className="text-4xl font-black text-white font-mono tracking-widest py-1 drop-shadow-md">
+                {getTakeawayQueueNumber(completedOrder.createdOrder)}
+              </div>
+              <p className="text-[11px] text-stone-300">
+                {orderType === 'BUNGKUS'
+                  ? 'Pesanan akan disiapkan untuk diambil di kasir.'
+                  : `Pesanan akan diantar ke Pesantren DQM (${deliveryLocation} - ${deliveryDetail}).`}
+              </p>
+            </div>
 
             <div className="bg-stone-950 p-4 rounded-2xl border border-stone-800 text-left space-y-2 text-xs">
               <div className="flex justify-between">
-                <span className="text-stone-400">No. Pesanan:</span>
+                <span className="text-stone-400">No. Transaksi:</span>
                 <span className="font-mono font-bold text-amber-400">
                   {completedOrder.orderId}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-stone-400">Layanan:</span>
+                <span className="text-stone-400">Jenis Pesanan:</span>
                 <span className="font-bold text-stone-200">
-                  {orderType === 'Takeaway' ? '🥡 Takeaway (Bungkus)' : '🛵 Delivery (Pesan Antar)'}
+                  {orderType === 'BUNGKUS' ? '[BUNGKUS]' : '[DELIVERY DQM]'}
                 </span>
               </div>
+              {orderType === 'DELIVERY_DQM' && (
+                <div className="flex justify-between">
+                  <span className="text-stone-400">Lokasi DQM:</span>
+                  <span className="font-bold text-teal-400">
+                    {deliveryLocation} ({deliveryDetail})
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-stone-400">Total Tagihan:</span>
                 <span className="font-extrabold text-emerald-400 font-mono text-sm">
@@ -1061,29 +1246,12 @@ export const CustomerOrderView: React.FC<CustomerOrderViewProps> = ({
               </div>
               <div className="flex justify-between items-center pt-2 border-t border-stone-800">
                 <span className="text-stone-400">Status Pesanan:</span>
-                {liveStatus === 'Pending' && (
-                  <span className="text-amber-400 font-bold flex items-center gap-1.5 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-                    Menunggu Konfirmasi Kasir
-                  </span>
-                )}
-                {liveStatus === 'Diproses' && (
-                  <span className="text-blue-400 font-bold flex items-center gap-1.5 bg-blue-500/10 px-2 py-0.5 rounded-lg border border-blue-500/20">
-                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-                    Sedang Dimasak di Dapur
-                  </span>
-                )}
-                {liveStatus === 'Selesai' && (
-                  <span className="text-emerald-400 font-bold flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded-lg border border-emerald-500/20">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Siap Diambil / Diantar!
-                  </span>
-                )}
-                {liveStatus === 'Dibatalkan' && (
-                  <span className="text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-lg border border-rose-500/20">
-                    Pesanan Dibatalkan
-                  </span>
-                )}
+                <span className="text-amber-400 font-bold flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/30">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  {orderType === 'DELIVERY_DQM'
+                    ? getDeliveryStatusLabel(liveDeliveryStatus)
+                    : getOrderStatusLabel(liveStatus, orderType)}
+                </span>
               </div>
             </div>
 

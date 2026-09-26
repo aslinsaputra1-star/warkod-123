@@ -1,5 +1,5 @@
-import React from 'react';
-import { Printer, Share2, Download, CheckCircle2, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Printer, Share2, Download, CheckCircle2, X, Check } from 'lucide-react';
 import { Transaction, StoreSettings } from '../../types';
 import { BrandLogo } from '../Common/BrandLogo';
 import {
@@ -7,6 +7,7 @@ import {
   buildCashierReceiptWhatsAppMessage,
   openWhatsAppChat,
   getTakeawayQueueNumber,
+  resolveOrderType,
 } from '../../utils/formatters';
 
 interface ReceiptModalProps {
@@ -22,6 +23,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   onClose,
   onNewTransaction,
 }) => {
+  const [copied, setCopied] = useState(false);
+
   if (!transaction) return null;
 
   const handlePrint = () => {
@@ -37,7 +40,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   const handleCopyText = () => {
     const text = buildCashierReceiptWhatsAppMessage(transaction, settings.storeName);
     navigator.clipboard.writeText(text);
-    alert('Struk teks berhasil disalin ke clipboard!');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   return (
@@ -76,15 +80,21 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
               <div className="font-extrabold text-sm tracking-wider text-amber-400">
                 {settings.storeName.toUpperCase()}
               </div>
-              <div className="text-[11px] text-stone-400 mt-0.5">{settings.address}</div>
+              <div className="text-[11px] text-stone-400 mt-0.5">{settings.address || settings.storeAddress}</div>
               <div className="text-[11px] text-stone-400">WA: {settings.whatsappNumber}</div>
             </div>
 
             {/* Transaction Meta */}
             <div className="py-2.5 border-b border-dashed border-stone-700 space-y-1 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-stone-400">No Invoice:</span>
+                <span className="text-stone-400">No Transaksi:</span>
                 <span className="font-bold text-stone-100">{transaction.id_transaksi}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-400">Jenis Pesanan:</span>
+                <span className="font-black text-amber-400">
+                  {resolveOrderType(transaction) === 'DELIVERY_DQM' ? '[DELIVERY DQM]' : '[BUNGKUS]'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-stone-400">Tanggal:</span>
@@ -94,30 +104,34 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 <span className="text-stone-400">Kasir:</span>
                 <span>{transaction.kasir}</span>
               </div>
-              {transaction.nama_pelanggan && transaction.nama_pelanggan !== 'Pelanggan Umum' && (
+              {transaction.nama_pelanggan && (
                 <div className="flex justify-between">
-                  <span className="text-stone-400">Pelanggan:</span>
+                  <span className="text-stone-400">Pemesan:</span>
                   <span>{transaction.nama_pelanggan}</span>
+                </div>
+              )}
+              {resolveOrderType(transaction) === 'DELIVERY_DQM' && (
+                <div className="pt-1 text-[10px] text-teal-300">
+                  Lokasi: Pesantren DQM • {transaction.deliveryLocation || ''}{' '}
+                  {transaction.deliveryDetail ? `(${transaction.deliveryDetail})` : ''}
                 </div>
               )}
             </div>
 
-            {/* Takeaway Queue Highlight on Receipt */}
-            {(transaction.tipe_pesanan === 'Takeaway' ||
-              transaction.id_transaksi.startsWith('TKW') ||
-              (!transaction.tipe_pesanan && !transaction.alamat_pengantaran)) && (
-              <div className="py-2.5 my-1.5 px-3 bg-stone-900 border border-amber-500/40 rounded-xl text-center space-y-0.5">
-                <span className="text-[10px] text-amber-400 uppercase tracking-widest font-sans font-bold block">
-                  NOMOR ANTRIAN TAKEAWAY
-                </span>
-                <span className="text-2xl font-black text-white font-mono tracking-wider">
-                  {getTakeawayQueueNumber(transaction)}
-                </span>
-                <span className="text-[9px] text-stone-400 font-sans block">
-                  Harap perhatikan nomor antrian saat dipanggil
-                </span>
-              </div>
-            )}
+            {/* Queue Highlight on Receipt */}
+            <div className="py-2.5 my-1.5 px-3 bg-stone-900 border border-amber-500/40 rounded-xl text-center space-y-0.5">
+              <span className="text-[10px] text-amber-400 uppercase tracking-widest font-sans font-bold block">
+                NOMOR ANTRIAN {resolveOrderType(transaction) === 'DELIVERY_DQM' ? 'DELIVERY DQM' : 'BUNGKUS'}
+              </span>
+              <span className="text-2xl font-black text-white font-mono tracking-wider">
+                {getTakeawayQueueNumber(transaction)}
+              </span>
+              <span className="text-[9px] text-stone-400 font-sans block">
+                {resolveOrderType(transaction) === 'DELIVERY_DQM'
+                  ? 'Pesanan diantar khusus area Pesantren DQM'
+                  : 'Pesanan akan disiapkan untuk diambil'}
+              </span>
+            </div>
 
             {/* Items List */}
             <div className="py-3 border-b border-dashed border-stone-700 space-y-2">
@@ -224,10 +238,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
           <div className="grid grid-cols-2 gap-2 pt-1">
             <button
               onClick={handleCopyText}
-              className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs border border-stone-700 transition"
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-semibold text-xs border transition ${
+                copied
+                  ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
+                  : 'bg-stone-800 hover:bg-stone-700 text-stone-300 border-stone-700'
+              }`}
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Salin Teks</span>
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Download className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Tersalin!' : 'Salin Teks'}</span>
             </button>
             <button
               id="btn-receipt-new-tx"

@@ -338,6 +338,47 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </button>
           </div>
 
+          {/* Quick Login Shortcut for Instant Access */}
+          <div className="p-3 rounded-2xl bg-stone-950 border border-stone-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                Pilih Cepat Akun Karyawan / Pemilik
+              </span>
+              <span className="text-[10px] text-stone-400">1-Klik Masuk</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {users.filter(u => ['Owner', 'Admin', 'Kasir', 'Staff'].includes(u.role)).map((u) => {
+                const badge = getRoleBadgeInfo(u.role);
+                return (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => {
+                      StorageService.setAuthUser(u);
+                      onLoginSuccess(u);
+                      showToast(`Berhasil masuk sebagai ${u.nama}!`, 'success');
+                      onClose();
+                    }}
+                    className="flex items-center justify-between p-2 rounded-xl bg-stone-900 hover:bg-stone-850 active:scale-95 border border-stone-800 hover:border-amber-500/40 text-left transition cursor-pointer group"
+                  >
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="text-[11px] font-bold text-stone-200 truncate group-hover:text-amber-300 transition">
+                        {u.nama}
+                      </p>
+                      <p className="text-[9px] text-stone-400 font-mono">
+                        PIN: {u.pin}
+                      </p>
+                    </div>
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${badge.badgeBg} ${badge.badgeText} ${badge.badgeBorder} shrink-0`}>
+                      {badge.badge}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="relative flex items-center py-1">
             <div className="flex-grow border-t border-stone-800"></div>
             <span className="flex-shrink mx-3 text-[10px] uppercase font-bold text-stone-500 tracking-wider">

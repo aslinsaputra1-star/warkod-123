@@ -46,14 +46,21 @@ export class ErrorBoundary extends React.Component<Props, State> {
   };
 
   private handleFullReset = () => {
-    if (window.confirm('Reset seluruh data lokal ke pengaturan awal pabrik Warung Bang Kobra?')) {
-      try {
-        localStorage.clear();
-      } catch (e) {
-        console.error('Error clearing storage:', e);
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm('Reset seluruh data lokal ke pengaturan awal pabrik Warung Bang Kobra?')) {
+          return;
+        }
       }
-      window.location.href = window.location.pathname;
+    } catch {
+      // Continue if window.confirm is restricted
     }
+    try {
+      localStorage.clear();
+    } catch (e) {
+      console.error('Error clearing storage:', e);
+    }
+    window.location.href = window.location.pathname;
   };
 
   public render() {

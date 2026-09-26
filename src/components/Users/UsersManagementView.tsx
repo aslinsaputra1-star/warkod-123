@@ -149,12 +149,20 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       return;
     }
 
-    if (window.confirm(`Hapus pengguna "${user.nama}"?`)) {
-      const updated = StorageService.deleteUser(user.id);
-      setUsers(updated);
-      deleteUserFromFirebase(user.id).catch(() => {});
-      showToast(`Pengguna "${user.nama}" dihapus`, 'info');
+    try {
+      if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+        if (!window.confirm(`Hapus pengguna "${user.nama}"?`)) {
+          return;
+        }
+      }
+    } catch {
+      // Continue if window.confirm is restricted
     }
+
+    const updated = StorageService.deleteUser(user.id);
+    setUsers(updated);
+    deleteUserFromFirebase(user.id).catch(() => {});
+    showToast(`Pengguna "${user.nama}" dihapus`, 'info');
   };
 
   return (

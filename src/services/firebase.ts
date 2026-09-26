@@ -356,27 +356,45 @@ export async function saveOrderToFirebase(order: Transaction): Promise<{ success
       await ensureFirebaseAuth();
     }
     const orderDocRef = doc(db, 'orders', order.id_transaksi);
-    
-    // Sanitize data for Firestore
+
+    const isDeliveryDqm =
+      order.orderType === 'DELIVERY_DQM' ||
+      order.tipe_pesanan === 'DELIVERY_DQM' ||
+      order.tipe_pesanan === 'Delivery';
+
+    const resolvedOrderType: 'BUNGKUS' | 'DELIVERY_DQM' = isDeliveryDqm ? 'DELIVERY_DQM' : 'BUNGKUS';
+
+    // Sanitize data for Firestore according to strict Database Order rules:
+    // For BUNGKUS: deliveryArea = null, deliveryLocation = null, deliveryDetail = null, deliveryFee = 0
+    // For DELIVERY_DQM: deliveryArea = 'DQM', deliveryLocation, deliveryDetail, deliveryNote, deliveryFee, deliveryStatus
     const firestorePayload = {
       id_transaksi: order.id_transaksi,
       tanggal: order.tanggal,
       jam: order.jam,
       kasir: order.kasir || 'Online QR Customer',
       customerId: auth.currentUser?.uid || '',
-      nama_pelanggan: order.nama_pelanggan || 'Pelanggan QR',
+      nama_pelanggan: order.nama_pelanggan || 'Pelanggan',
       no_whatsapp: order.no_whatsapp || '',
       subtotal: Number(order.subtotal || 0),
       diskon: Number(order.diskon || 0),
-      biaya: Number(order.biaya || 0),
+      biaya: isDeliveryDqm ? Number(order.deliveryFee ?? order.biaya ?? 0) : Number(order.biaya || 0),
       total: Number(order.total || 0),
       metode_pembayaran: order.metode_pembayaran || 'Cash',
       uang_diterima: Number(order.uang_diterima || 0),
       kembalian: Number(order.kembalian || 0),
-      status: order.status || 'Pending',
-      tipe_pesanan: order.tipe_pesanan || 'Takeaway',
-      alamat_pengantaran: order.alamat_pengantaran || '',
-      catatan_pesanan: order.catatan_pesanan || '',
+      status: order.status || 'MENUNGGU',
+      orderType: resolvedOrderType,
+      tipe_pesanan: resolvedOrderType,
+      deliveryArea: isDeliveryDqm ? 'DQM' : null,
+      deliveryLocation: isDeliveryDqm ? String(order.deliveryLocation || '') : null,
+      deliveryDetail: isDeliveryDqm ? String(order.deliveryDetail || '') : null,
+      deliveryNote: isDeliveryDqm ? String(order.deliveryNote || order.catatan_pesanan || '') : null,
+      deliveryFee: isDeliveryDqm ? Number(order.deliveryFee ?? order.biaya ?? 0) : 0,
+      deliveryStatus: isDeliveryDqm ? (order.deliveryStatus || 'MENUNGGU') : null,
+      alamat_pengantaran: isDeliveryDqm
+        ? order.alamat_pengantaran || `Pesantren DQM - ${order.deliveryLocation || ''} ${order.deliveryDetail ? `(${order.deliveryDetail})` : ''}`.trim()
+        : '',
+      catatan_pesanan: order.catatan_pesanan || order.deliveryNote || '',
       created_at: order.created_at || new Date().toISOString(),
       items: (order.items || []).map((item) => ({
         id_detail: item.id_detail || '',
@@ -417,15 +435,22 @@ export function subscribeToFirebaseOrders(
   const path = 'orders';
   try {
     const ordersCol = collection(db, 'orders');
-    const q = query(ordersCol, orderBy('created_at', 'desc'));
 
     const unsubscribe = onSnapshot(
-      q,
+      ordersCol,
       (snapshot) => {
         const list: Transaction[] = [];
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as Transaction;
-          list.push(data);
+          if (data && data.id_transaksi) {
+            list.push(data);
+          }
+        });
+        // Sort descending by created_at in-memory (fast & resilient without composite index requirements)
+        list.sort((a, b) => {
+          const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return timeB - timeA;
         });
         onOrdersReceived(list);
       },
@@ -448,8 +473,9 @@ export function subscribeToFirebaseOrders(
  */
 export async function updateFirebaseOrderStatus(
   orderId: string,
-  newStatus: 'Pending' | 'Diproses' | 'Selesai' | 'Dibatalkan',
-  fullTransaction?: Transaction
+  newStatus: Transaction['status'],
+  fullTransaction?: Transaction,
+  newDeliveryStatus?: Transaction['deliveryStatus']
 ): Promise<boolean> {
   const path = `orders/${orderId}`;
   try {
@@ -458,6 +484,7 @@ export async function updateFirebaseOrderStatus(
       await saveOrderToFirebase({
         ...fullTransaction,
         status: newStatus,
+        ...(newDeliveryStatus !== undefined ? { deliveryStatus: newDeliveryStatus } : {}),
       });
       return true;
     }
@@ -466,6 +493,7 @@ export async function updateFirebaseOrderStatus(
       {
         id_transaksi: orderId,
         status: newStatus,
+        ...(newDeliveryStatus !== undefined ? { deliveryStatus: newDeliveryStatus } : {}),
         updated_at: new Date().toISOString(),
       },
       { merge: true }
@@ -554,16 +582,16 @@ export function subscribeToFirebaseProducts(
     const unsubscribe = onSnapshot(
       productsCol,
       (snapshot) => {
+        const list: Product[] = [];
         if (!snapshot.empty) {
-          const list: Product[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as Product;
             if (data && data.id) {
               list.push(data);
             }
           });
-          onProductsReceived(list);
         }
+        onProductsReceived(list);
       },
       (error) => {
         console.warn('Firebase products subscription warning:', error);
@@ -681,16 +709,16 @@ export function subscribeToFirebaseCategories(
     const unsubscribe = onSnapshot(
       colRef,
       (snapshot) => {
+        const list: CategoryItem[] = [];
         if (!snapshot.empty) {
-          const list: CategoryItem[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as CategoryItem;
             if (data && data.id) {
               list.push(data);
             }
           });
-          onCategoriesReceived(list);
         }
+        onCategoriesReceived(list);
       },
       (error) => {
         console.warn('Firebase categories subscription warning:', error);
@@ -757,20 +785,20 @@ export function subscribeToFirebaseExpenses(
 ): () => void {
   try {
     const colRef = collection(db, 'expenses');
-    const q = query(colRef, orderBy('created_at', 'desc'));
     const unsubscribe = onSnapshot(
-      q,
+      colRef,
       (snapshot) => {
+        const list: Expense[] = [];
         if (!snapshot.empty) {
-          const list: Expense[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as Expense;
             if (data && data.id) {
               list.push(data);
             }
           });
-          onExpensesReceived(list);
+          list.sort((a, b) => new Date(b.created_at || b.tanggal || 0).getTime() - new Date(a.created_at || a.tanggal || 0).getTime());
         }
+        onExpensesReceived(list);
       },
       (error) => {
         console.warn('Firebase expenses subscription warning:', error);
@@ -843,16 +871,17 @@ export function subscribeToFirebaseCustomers(
     const unsubscribe = onSnapshot(
       colRef,
       (snapshot) => {
+        const list: Customer[] = [];
         if (!snapshot.empty) {
-          const list: Customer[] = [];
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as Customer;
             if (data && data.id) {
               list.push(data);
             }
           });
-          onCustomersReceived(list);
+          list.sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
         }
+        onCustomersReceived(list);
       },
       (error) => {
         console.warn('Firebase customers subscription warning:', error);
@@ -875,15 +904,18 @@ export async function saveSettingsToFirebase(settings: StoreSettings): Promise<b
       await ensureFirebaseAuth();
     }
     const docRef = doc(db, 'settings', 'warung');
+    const storeAddr = String(settings.address || settings.storeAddress || '').trim();
     const payload = {
       id: 'warung',
       storeName: String(settings.storeName || 'Warung Bang Kobra'),
       tagline: String(settings.tagline || ''),
       storeSlogan: String(settings.storeSlogan || settings.tagline || ''),
-      address: String(settings.address || ''),
+      address: storeAddr,
+      storeAddress: storeAddr,
       whatsappNumber: String(settings.whatsappNumber || ''),
       logoUrl: String(settings.logoUrl || '/icon.svg'),
       receiptFooter: String(settings.receiptFooter || ''),
+      receiptPaperSize: settings.receiptPaperSize || '58mm',
       taxPercent: Number(settings.taxPercent ?? 0),
       currency: String(settings.currency || 'Rp'),
       qrisImageUrl: String(settings.qrisImageUrl || ''),
@@ -892,6 +924,12 @@ export async function saveSettingsToFirebase(settings: StoreSettings): Promise<b
       onlineMenuHours: String(settings.onlineMenuHours || ''),
       onlineMenuBankInfo: String(settings.onlineMenuBankInfo || ''),
       onlineMenuIsOpen: Boolean(settings.onlineMenuIsOpen ?? true),
+      onlineMenuAnnouncement: String(settings.onlineMenuAnnouncement || settings.onlineMenuBannerText || ''),
+      onlineMenuMinOrder: Number(settings.onlineMenuMinOrder ?? 0),
+      deliveryDqmEnabled: Boolean(settings.deliveryDqmEnabled ?? true),
+      deliveryFeeType: settings.deliveryFeeType || 'FREE',
+      deliveryFeeAmount: Number(settings.deliveryFeeAmount ?? 2000),
+      deliveryDqmNote: String(settings.deliveryDqmNote || ''),
       updated_at: new Date().toISOString(),
     };
     await setDoc(docRef, payload, { merge: true });
@@ -918,6 +956,11 @@ export function subscribeToFirebaseSettings(
           if (!remote.logoUrl || remote.logoUrl.trim() === '') {
             remote.logoUrl = '/icon.svg';
           }
+          const addr = String(remote.address || remote.storeAddress || '').trim();
+          if (addr) {
+            remote.address = addr;
+            remote.storeAddress = addr;
+          }
           onSettingsReceived(remote);
         } else {
           // Dokumen settings belum ada di Firestore, trigger sinkronisasi awal
@@ -932,5 +975,141 @@ export function subscribeToFirebaseSettings(
   } catch (err) {
     console.error('Failed to initialize settings listener:', err);
     return () => {};
+  }
+}
+
+/**
+ * SAVE STOCK MUTATION TO FIREBASE (Stok Masuk, Keluar, Koreksi)
+ */
+export async function saveStockMutationToFirebase(mutation: StockMutation): Promise<boolean> {
+  if (!mutation || !mutation.id) return false;
+  try {
+    if (!auth.currentUser) {
+      await ensureFirebaseAuth();
+    }
+    const docRef = doc(db, 'stock_mutations', String(mutation.id));
+    const payload = {
+      id: String(mutation.id),
+      tanggal: String(mutation.tanggal || new Date().toISOString()),
+      id_produk: String(mutation.id_produk || ''),
+      nama_produk: String(mutation.nama_produk || ''),
+      jenis: mutation.jenis || 'adjustment',
+      qty: Number(mutation.qty ?? 0),
+      stok_sebelum: Number(mutation.stok_sebelum ?? 0),
+      stok_sesudah: Number(mutation.stok_sesudah ?? 0),
+      keterangan: String(mutation.keterangan || ''),
+      created_at: new Date().toISOString(),
+    };
+    await setDoc(docRef, payload, { merge: true });
+    return true;
+  } catch (err) {
+    console.warn('Gagal menyimpan mutasi stok ke Firebase:', err);
+    return false;
+  }
+}
+
+/**
+ * SUBSCRIBE TO STOCK MUTATIONS (Synced across all devices)
+ */
+export function subscribeToFirebaseStockMutations(
+  onMutationsReceived: (mutations: StockMutation[]) => void
+): () => void {
+  try {
+    const colRef = collection(db, 'stock_mutations');
+    const unsubscribe = onSnapshot(
+      colRef,
+      (snapshot) => {
+        const list: StockMutation[] = [];
+        if (!snapshot.empty) {
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as StockMutation;
+            if (data && data.id) {
+              list.push(data);
+            }
+          });
+          list.sort((a, b) => new Date(b.tanggal || 0).getTime() - new Date(a.tanggal || 0).getTime());
+        }
+        onMutationsReceived(list);
+      },
+      (error) => {
+        console.warn('Firebase stock mutations subscription warning:', error);
+      }
+    );
+    return unsubscribe;
+  } catch (err) {
+    console.error('Failed to initialize stock mutations listener:', err);
+    return () => {};
+  }
+}
+
+/**
+ * COMPREHENSIVE CLOUD DATA SYNC:
+ * Menyelaraskan seluruh data warung (Pengaturan, Alamat, Menu, Kategori, Pesanan, Pelanggan, Pengeluaran)
+ * ke Firebase Cloud Firestore agar 100% konsisten antar semua perangkat.
+ */
+export async function syncAllDataToFirebase(params: {
+  settings: StoreSettings;
+  products: Product[];
+  categories: CategoryItem[];
+  transactions: Transaction[];
+  customers: Customer[];
+  expenses: Expense[];
+  mutations?: StockMutation[];
+}): Promise<{ success: boolean; message: string }> {
+  try {
+    if (!auth.currentUser) {
+      await ensureFirebaseAuth();
+    }
+    // 1. Simpan Pengaturan & Alamat Toko
+    await saveSettingsToFirebase(params.settings);
+
+    // 2. Simpan Produk Menu
+    if (params.products && params.products.length > 0) {
+      await syncProductsToFirebase(params.products);
+    }
+
+    // 3. Simpan Kategori
+    if (params.categories && params.categories.length > 0) {
+      await syncCategoriesToFirebase(params.categories);
+    }
+
+    // 4. Simpan Transaksi / Pesanan
+    if (params.transactions && params.transactions.length > 0) {
+      for (const tx of params.transactions) {
+        await saveOrderToFirebase(tx);
+      }
+    }
+
+    // 5. Simpan Pelanggan
+    if (params.customers && params.customers.length > 0) {
+      for (const cust of params.customers) {
+        await saveCustomerToFirebase(cust);
+      }
+    }
+
+    // 6. Simpan Pengeluaran
+    if (params.expenses && params.expenses.length > 0) {
+      for (const exp of params.expenses) {
+        await saveExpenseToFirebase(exp);
+      }
+    }
+
+    // 7. Simpan Mutasi Stok terbaru
+    if (params.mutations && params.mutations.length > 0) {
+      for (const mut of params.mutations.slice(0, 50)) {
+        await saveStockMutationToFirebase(mut);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Semua data toko (${params.products.length} menu, ${params.transactions.length} pesanan, pengaturan & alamat) berhasil disinkronkan ke Firebase Cloud!`,
+    };
+  } catch (err: any) {
+    console.error('Error syncAllDataToFirebase:', err);
+    return {
+      success: false,
+      message: 'Gagal sinkronisasi seluruh data ke Firebase: ' + (err?.message || 'Unknown error'),
+    };
   }
 }

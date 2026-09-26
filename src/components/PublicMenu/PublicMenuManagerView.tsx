@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   Send,
   MessageCircle,
+  Megaphone,
 } from 'lucide-react';
 import { Product, StoreSettings } from '../../types';
 import { generateQRCodeDataURL } from '../../utils/qrcode';
@@ -30,6 +31,7 @@ interface PublicMenuManagerViewProps {
   settings: StoreSettings;
   onSaveSettings: (newSettings: StoreSettings) => void;
   onOpenCustomerView: () => void;
+  onNavigateToAds?: () => void;
   showToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
 }
 
@@ -38,6 +40,7 @@ export const PublicMenuManagerView: React.FC<PublicMenuManagerViewProps> = ({
   settings,
   onSaveSettings,
   onOpenCustomerView,
+  onNavigateToAds,
   showToast,
 }) => {
   // Public Menu URL
@@ -165,10 +168,10 @@ export const PublicMenuManagerView: React.FC<PublicMenuManagerViewProps> = ({
           <div class="card">
             <h1>${settings.storeName}</h1>
             <p class="sub">${settings.tagline || 'Spesialis Masakan Nusantara & Sambal Kobra'}</p>
-            <div class="badge">📲 SCAN MENU DIGITAL & PESAN ONLINE</div>
+            <div className="badge">📲 QR MENU WARUNG BANG KOBRA (BUNGKUS &amp; DELIVERY DQM)</div>
             <img src="${qrDataUrl}" class="qr-img" />
             <p class="instruction">
-              Buka kamera HP Anda, scan QR Code di atas untuk melihat seluruh daftar menu, harga, dan memesan langsung via WhatsApp!
+              Buka kamera HP Anda, scan QR Code di atas untuk membuka menu, checkout, dan memilih BUNGKUS atau DELIVERY DQM!
             </p>
             <p class="url">${publicMenuUrl}</p>
           </div>
@@ -219,7 +222,17 @@ export const PublicMenuManagerView: React.FC<PublicMenuManagerViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {onNavigateToAds && (
+            <button
+              type="button"
+              onClick={onNavigateToAds}
+              className="min-h-[42px] px-4 py-2 rounded-2xl bg-gradient-to-r from-red-600 via-orange-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-black flex items-center gap-2 shadow-lg shadow-red-950/50 transition cursor-pointer active:scale-95"
+            >
+              <Megaphone className="w-4 h-4" />
+              <span>Kelola Iklan Menu</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={onOpenCustomerView}
@@ -300,10 +313,10 @@ export const PublicMenuManagerView: React.FC<PublicMenuManagerViewProps> = ({
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <QrCode className="w-5 h-5 text-orange-400" />
-              <h3 className="text-sm font-extrabold text-stone-200">QR Code Menu Digital</h3>
+              <h3 className="text-sm font-extrabold text-stone-200">QR MENU WARUNG BANG KOBRA</h3>
             </div>
             <p className="text-xs text-stone-400">
-              Cetak QR Code ini untuk ditempel di meja warung, kasir, atau pamflet banner.
+              Cetak QR Code ini untuk ditempel di kasir warung, brosur Pesantren DQM, atau banner pesanan.
             </p>
           </div>
 
@@ -338,7 +351,7 @@ export const PublicMenuManagerView: React.FC<PublicMenuManagerViewProps> = ({
               </button>
             </div>
             <p className="text-[11px] text-center text-stone-400">
-              Mendukung cetak Standee Akrilik Meja ukuran A5 / A6.
+              Mendukung cetak Standee Kasir &amp; Brosur DQM ukuran A5 / A6.
             </p>
           </div>
         </div>
@@ -475,9 +488,9 @@ export const PublicMenuManagerView: React.FC<PublicMenuManagerViewProps> = ({
             </p>
           </div>
           <div className="p-3 bg-stone-950/80 rounded-2xl border border-stone-800/80 space-y-1">
-            <strong className="text-stone-200 block">3. Standee Meja & Kasir</strong>
+            <strong className="text-stone-200 block">3. Standee Kasir &amp; Asrama DQM</strong>
             <p>
-              Cetak QR Code di atas dan letakkan di meja makan agar pelanggan tidak perlu menunggu buku menu fisik.
+              Cetak QR Menu Warung Bang Kobra di atas untuk memudahkan pesanan BUNGKUS maupun DELIVERY DQM.
             </p>
           </div>
         </div>

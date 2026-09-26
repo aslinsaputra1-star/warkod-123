@@ -91,6 +91,16 @@
   }
 }
 
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
 .animate-fade-in-up {
   animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   will-change: transform, opacity;
@@ -143,6 +153,128 @@
   );
   animation: shimmerSweep 3.5s infinite;
   pointer-events: none;
+}
+
+/* Digital Menu Specialized Keyframes */
+@keyframes marqueeSmooth {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes floatBadge {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes flameDance {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.12) rotate(-4deg);
+  }
+  75% {
+    transform: scale(1.08) rotate(4deg);
+  }
+}
+
+@keyframes cartJump {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.12) translateY(-6px);
+  }
+  60% {
+    transform: scale(0.96) translateY(2px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes buttonPress {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.88);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes shineGleam {
+  0% {
+    opacity: 0;
+    transform: translateX(-100%) rotate(25deg);
+  }
+  40% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(200%) rotate(25deg);
+  }
+}
+
+@keyframes pulseBorder {
+  0%, 100% {
+    border-color: rgba(245, 158, 11, 0.3);
+  }
+  50% {
+    border-color: rgba(245, 158, 11, 0.8);
+  }
+}
+
+.animate-marquee-smooth {
+  display: flex;
+  width: max-content;
+  animation: marqueeSmooth 22s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-smooth:hover {
+  animation-play-state: paused;
+}
+
+.animate-float-badge {
+  animation: floatBadge 2.8s ease-in-out infinite;
+}
+
+.animate-flame-dance {
+  animation: flameDance 1.8s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.animate-cart-jump {
+  animation: cartJump 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+.animate-btn-press {
+  animation: buttonPress 0.25s ease-out;
+}
+
+.animate-pulse-border {
+  animation: pulseBorder 2.5s infinite ease-in-out;
+}
+
+.menu-card-hover {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s ease;
+}
+
+.menu-card-hover:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 16px 32px -8px rgba(234, 88, 12, 0.22), 0 0 0 1px rgba(249, 115, 22, 0.35);
 }
 
 @media print {
