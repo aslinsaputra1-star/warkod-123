@@ -24,6 +24,8 @@ import {
   AlertCircle,
   Truck,
   MapPin,
+  Github,
+  Check,
 } from 'lucide-react';
 import { StoreSettings, Product } from '../../types';
 import { formatRupiah } from '../../utils/formatters';
@@ -119,6 +121,135 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   } | null>(null);
   const [isSyncingFirebaseProducts, setIsSyncingFirebaseProducts] = useState(false);
   const [isSyncingAllFirebase, setIsSyncingAllFirebase] = useState(false);
+
+  // GitHub OAuth & Repository Backup Sync States
+  const [githubStatus, setGithubStatus] = useState<{
+    connected: boolean;
+    oauthConfigured: boolean;
+    redirectUri: string;
+    user: { login: string; name: string | null; avatar_url: string; html_url: string } | null;
+    repos: Array<{ id: number; name: string; full_name: string; private: boolean; html_url: string }>;
+  }>({
+    connected: false,
+    oauthConfigured: false,
+    redirectUri: `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`,
+    user: null,
+    repos: [],
+  });
+  const [selectedGithubRepo, setSelectedGithubRepo] = useState<string>('');
+  const [newGithubRepoName, setNewGithubRepoName] = useState<string>('warung-bang-kobra-pos');
+  const [isSyncingGithub, setIsSyncingGithub] = useState<boolean>(false);
+  const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<boolean>(false);
+
+  const fetchGithubStatus = async () => {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await fetch(`/api/github/status?origin=${encodeURIComponent(origin)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setGithubStatus(data);
+        if (data.repos && data.repos.length > 0 && !selectedGithubRepo) {
+          setSelectedGithubRepo(data.repos[0].full_name);
+        }
+      }
+    } catch (err) {
+      console.warn('GitHub status check failed:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchGithubStatus();
+
+    const handleOAuthMessage = (event: MessageEvent) => {
+      const origin = event.origin;
+      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+        return;
+      }
+      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+        fetchGithubStatus();
+        showToast('Akun GitHub berhasil terhubung!', 'success');
+      } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
+        showToast(`Gagal menghubungkan GitHub: ${event.data?.error || 'Dibatalkan'}`, 'error');
+      }
+    };
+
+    window.addEventListener('message', handleOAuthMessage);
+    return () => window.removeEventListener('message', handleOAuthMessage);
+  }, []);
+
+  const handleConnectGithub = async () => {
+    try {
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      const response = await fetch(`/api/auth/github/url?origin=${encodeURIComponent(origin)}`);
+      const data = await response.json();
+
+      if (!response.ok || !data.url) {
+        showToast(
+          data.error || 'Isi CLIENT_ID & CLIENT_SECRET GitHub OAuth di panel Secrets AI Studio terlebih dahulu.',
+          'info'
+        );
+        return;
+      }
+
+      const authWindow = window.open(data.url, 'github_oauth_popup', 'width=600,height=700');
+      if (!authWindow) {
+        showToast('Pop-up diblokir browser. Izinkan pop-up untuk menghubungkan GitHub.', 'error');
+      }
+    } catch (err: any) {
+      showToast('Gagal memulai koneksi GitHub: ' + (err?.message || 'Error'), 'error');
+    }
+  };
+
+  const handleDisconnectGithub = async () => {
+    try {
+      await fetch('/api/github/disconnect', { method: 'POST' });
+      await fetchGithubStatus();
+      showToast('Koneksi akun GitHub diputuskan.', 'info');
+    } catch {
+      showToast('Gagal memutuskan koneksi GitHub', 'error');
+    }
+  };
+
+  const handlePushBackupToGithub = async (createNew = false) => {
+    setIsSyncingGithub(true);
+    try {
+      const backupPayload = {
+        exportedAt: new Date().toISOString(),
+        app: 'WARUNG BANG KOBRA POS (BUNGKUS & DELIVERY DQM)',
+        settings: formData,
+        products: StorageService.getProducts(),
+        categories: StorageService.getCategories(),
+        transactions: StorageService.getTransactions(),
+        customers: StorageService.getCustomers(),
+        expenses: StorageService.getExpenses(),
+        stockMutations: StorageService.getStockMutations(),
+      };
+
+      const res = await fetch('/api/github/sync-backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repoFullName: createNew ? '' : selectedGithubRepo,
+          createNewRepoName: createNew ? newGithubRepoName : '',
+          backupData: backupPayload,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(data.message, 'success');
+        await fetchGithubStatus();
+        if (data.repoFullName) {
+          setSelectedGithubRepo(data.repoFullName);
+        }
+      } else {
+        showToast(data.message || 'Gagal push backup ke GitHub', 'error');
+      }
+    } catch (err: any) {
+      showToast('Error push ke GitHub: ' + (err?.message || 'Error'), 'error');
+    } finally {
+      setIsSyncingGithub(false);
+    }
+  };
 
   const handleInputChange = (field: keyof StoreSettings, value: any) => {
     dirtyFieldsRef.current.add(field);
@@ -811,6 +942,189 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Section 2B: Integrasi GitHub (Source Code Export & OAuth Cloud Backup) */}
+        <div
+          id="settings-github-integration"
+          className="bg-stone-900 border-2 border-stone-700/80 rounded-3xl p-6 space-y-4 shadow-xl relative overflow-hidden"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-stone-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-stone-950 border border-stone-700 flex items-center justify-center text-white shrink-0">
+                <Github className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-black text-stone-100 text-base sm:text-lg">
+                    Integrasi GitHub &amp; Sinkronisasi Repositori
+                  </h3>
+                  {githubStatus.connected ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Terhubung (@{githubStatus.user?.login})
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      Siap Dihubungkan
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-stone-400">
+                  Hubungkan proyek ke repositori GitHub untuk menyimpan source code aplikasi maupun backup database JSON Warung Bang Kobra.
+                </p>
+              </div>
+            </div>
+
+            {githubStatus.connected ? (
+              <button
+                type="button"
+                onClick={handleDisconnectGithub}
+                className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-rose-950/60 text-stone-300 hover:text-rose-300 border border-stone-700 text-xs font-bold transition cursor-pointer"
+              >
+                Putuskan Akun GitHub
+              </button>
+            ) : (
+              <button
+                type="button"
+                id="btn-connect-github-oauth"
+                onClick={handleConnectGithub}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-stone-200 text-stone-950 font-black text-xs shadow-lg transition active:scale-95 cursor-pointer"
+              >
+                <Github className="w-4 h-4" />
+                <span>Hubungkan Akun GitHub (OAuth)</span>
+              </button>
+            )}
+          </div>
+
+          {/* Cara 1: Export Source Code Langsung dari Toolbar AI Studio */}
+          <div className="p-4 rounded-2xl bg-stone-950 border border-amber-500/30 space-y-2">
+            <div className="flex items-center gap-2 text-xs font-black text-amber-400">
+              <Sparkles className="w-4 h-4" />
+              <span>Cara Tercepat: Push Seluruh Source Code Aplikasi ke GitHub</span>
+            </div>
+            <p className="text-xs text-stone-300 leading-relaxed">
+              Untuk mengunggah seluruh kode sumber proyek <strong>Warung Bang Kobra POS</strong> ke repositori GitHub Anda: klik ikon <strong>GitHub (Save to GitHub)</strong> di bar bagian kanan atas layar Google AI Studio, lalu masuk ke akun GitHub Anda dan pilih nama repositori tujuan.
+            </p>
+          </div>
+
+          {/* Cara 2: OAuth App Setup / Connected Repository Backup */}
+          {githubStatus.connected && githubStatus.user ? (
+            <div className="p-4 rounded-2xl bg-stone-950 border border-emerald-500/40 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {githubStatus.user.avatar_url && (
+                    <img
+                      src={githubStatus.user.avatar_url}
+                      alt={githubStatus.user.login}
+                      className="w-10 h-10 rounded-xl border border-stone-700"
+                    />
+                  )}
+                  <div>
+                    <div className="text-xs font-black text-white">
+                      {githubStatus.user.name || githubStatus.user.login}
+                    </div>
+                    <a
+                      href={githubStatus.user.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] font-mono text-emerald-400 hover:underline flex items-center gap-1"
+                    >
+                      <span>github.com/{githubStatus.user.login}</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+                </div>
+
+                <span className="text-[11px] text-stone-400">
+                  Target file: <code className="text-amber-400">backup/warung-bang-kobra-data.json</code>
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-300 block">
+                    Pilih Repositori GitHub yang Ada:
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedGithubRepo}
+                      onChange={(e) => setSelectedGithubRepo(e.target.value)}
+                      className="flex-1 bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="">-- Pilih Repositori --</option>
+                      {githubStatus.repos.map((r) => (
+                        <option key={r.id} value={r.full_name}>
+                          {r.full_name} {r.private ? '(Private)' : '(Public)'}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      disabled={isSyncingGithub || !selectedGithubRepo}
+                      onClick={() => handlePushBackupToGithub(false)}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs transition disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                    >
+                      {isSyncingGithub ? 'Menyimpan...' : 'Push ke Repo Ini'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-stone-300 block">
+                    Atau Buat Repositori Baru &amp; Push:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newGithubRepoName}
+                      onChange={(e) => setNewGithubRepoName(e.target.value)}
+                      placeholder="warung-bang-kobra-pos"
+                      className="flex-1 bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs text-stone-100 font-mono focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={isSyncingGithub || !newGithubRepoName.trim()}
+                      onClick={() => handlePushBackupToGithub(true)}
+                      className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-black text-xs transition disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                    >
+                      {isSyncingGithub ? 'Membuat...' : '+ Buat Repo & Push'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-stone-950 border border-stone-800 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="font-bold text-stone-300">
+                  Konfigurasi GitHub OAuth Callback URL (Untuk Backup Otomatis via OAuth):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cbUrl =
+                      githubStatus.redirectUri ||
+                      `${typeof window !== 'undefined' ? window.location.origin : ''}/auth/callback`;
+                    navigator.clipboard?.writeText(cbUrl);
+                    setCopiedCallbackUrl(true);
+                    showToast('Callback URL berhasil disalin!', 'success');
+                    setTimeout(() => setCopiedCallbackUrl(false), 2000);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-400 font-bold text-[11px] border border-stone-700 cursor-pointer"
+                >
+                  {copiedCallbackUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedCallbackUrl ? 'Tersalin!' : 'Salin Callback URL'}</span>
+                </button>
+              </div>
+              <div className="font-mono text-[11px] text-stone-300 bg-stone-900 px-3 py-2 rounded-xl border border-stone-800 select-all break-all">
+                {githubStatus.redirectUri || 'https://ais-dev-vvkup7s5grehb5zmfiw7wo-139105616929.asia-southeast1.run.app/auth/callback'}
+              </div>
+              <p className="text-[11px] text-stone-400">
+                Daftarkan URL di atas pada <strong className="text-stone-200">GitHub Developer Settings → OAuth Apps</strong>, lalu isi <code className="text-amber-400">CLIENT_ID</code> dan <code className="text-amber-400">CLIENT_SECRET</code> pada menu Secrets AI Studio.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Section 3: Integrasi Google Sheets Backend */}
