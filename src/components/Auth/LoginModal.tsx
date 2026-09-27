@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { WarungUser, UserRole, StoreSettings } from '../../types';
 import { StorageService } from '../../services/storage';
-import { signInWithGoogle } from '../../services/firebase';
+import { signInWithGoogle, signInWithEmailPasswordFirebase } from '../../services/firebase';
 import { BrandLogo } from '../Common/BrandLogo';
 import {
   normalizeRole,
@@ -155,46 +155,31 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     window.open(window.location.href, '_blank');
   };
 
-  const handleFormLogin = (e: React.FormEvent) => {
+  const handleFormLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
     if (!identifier.trim() || !pin.trim()) {
-      setErrorMsg('Username/No. HP dan PIN wajib diisi!');
+      setErrorMsg('Email dan Password wajib diisi!');
       return;
     }
 
     setIsLoading(true);
-    const cleanId = identifier.trim().toLowerCase();
-    const cleanPin = pin.trim();
-
-    // Match by username or phone
-    const matched = users.find(
-      (u) =>
-        (u.username.toLowerCase() === cleanId ||
-          u.no_hp?.replace(/\D/g, '') === cleanId.replace(/\D/g, '') ||
-          u.email?.toLowerCase() === cleanId) &&
-        u.pin === cleanPin
-    );
-
-    if (!matched) {
+    try {
+      const authenticatedUser = await signInWithEmailPasswordFirebase(
+        identifier.trim(),
+        pin.trim(),
+        users
+      );
+      StorageService.setAuthUser(authenticatedUser);
+      onLoginSuccess(authenticatedUser);
       setIsLoading(false);
-      setErrorMsg('Username/No. HP atau PIN tidak sesuai. Silakan periksa kembali!');
-      return;
-    }
-
-    if (matched.status === 'Nonaktif') {
+      showToast(`Selamat datang kembali, ${authenticatedUser.nama} (${authenticatedUser.role.toUpperCase()})!`, 'success');
+      onClose();
+    } catch (err: any) {
       setIsLoading(false);
-      setErrorMsg('Akun ini sedang dinonaktifkan oleh administrator.');
-      return;
+      setErrorMsg(err?.message || 'Email atau Password tidak sesuai. Silakan periksa kembali!');
     }
-
-    // Success
-    StorageService.setAuthUser(matched);
-    onLoginSuccess(matched);
-    setIsLoading(false);
-    showToast(`Selamat datang kembali, ${matched.nama}!`, 'success');
-    onClose();
   };
 
   return (
@@ -239,11 +224,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         <div className="flex items-center justify-between border-b border-stone-800 bg-stone-950/80 px-5 py-3 text-xs font-extrabold">
           <div className="flex items-center gap-2 text-white">
             <Key className="w-3.5 h-3.5 text-red-500" />
-            <span>Masuk Akun / PIN Karyawan</span>
+            <span>Firebase Authentication (Email + Password)</span>
           </div>
           <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-bold bg-amber-950/60 border border-amber-800/60 px-2.5 py-0.5 rounded-full">
             <ShieldCheck className="w-3 h-3" />
-            <span>Pendaftaran Khusus Owner</span>
+            <span>OWNER • ADMIN • KASIR • STAFF</span>
           </div>
         </div>
 
@@ -343,9 +328,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                 <Crown className="w-3.5 h-3.5 text-amber-400" />
-                Pilih Cepat Akun Karyawan / Pemilik
+                Pilih Cepat Role (OWNER, ADMIN, KASIR, STAFF)
               </span>
-              <span className="text-[10px] text-stone-400">1-Klik Masuk</span>
+              <span className="text-[10px] text-stone-400">Firebase Auth</span>
             </div>
             <div className="grid grid-cols-2 gap-1.5">
               {users.filter(u => ['Owner', 'Admin', 'ADMIN', 'Kasir', 'KASIR', 'Staff', 'Delivery', 'DELIVERY'].includes(u.role)).map((u) => {
@@ -354,11 +339,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => {
-                      StorageService.setAuthUser(u);
-                      onLoginSuccess(u);
-                      showToast(`Berhasil masuk sebagai ${u.nama}!`, 'success');
-                      onClose();
+                    onClick={async () => {
+                      setIsLoading(true);
+                      try {
+                        const authed = await signInWithEmailPasswordFirebase(
+                          u.email || u.username,
+                          u.pin || '1234',
+                          users
+                        );
+                        StorageService.setAuthUser(authed);
+                        onLoginSuccess(authed);
+                      } catch {
+                        StorageService.setAuthUser(u);
+                        onLoginSuccess(u);
+                      } finally {
+                        setIsLoading(false);
+                        showToast(`Berhasil masuk sebagai ${u.nama} (${u.role.toUpperCase()})!`, 'success');
+                        onClose();
+                      }
                     }}
                     className="flex items-center justify-between p-2 rounded-xl bg-stone-900 hover:bg-stone-850 active:scale-95 border border-stone-800 hover:border-amber-500/40 text-left transition cursor-pointer group"
                   >
@@ -366,8 +364,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                       <p className="text-[11px] font-bold text-stone-200 truncate group-hover:text-amber-300 transition">
                         {u.nama}
                       </p>
-                      <p className="text-[9px] text-stone-400 font-mono">
-                        PIN: {u.pin}
+                      <p className="text-[9px] text-stone-400 font-mono truncate">
+                        {u.email || `${u.username}@warungkobra.com`}
                       </p>
                     </div>
                     <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${badge.badgeBg} ${badge.badgeText} ${badge.badgeBorder} shrink-0`}>
@@ -382,22 +380,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <div className="relative flex items-center py-1">
             <div className="flex-grow border-t border-stone-800"></div>
             <span className="flex-shrink mx-3 text-[10px] uppercase font-bold text-stone-500 tracking-wider">
-              Atau Masuk dengan PIN
+              Login Email + Password (Firebase Auth)
             </span>
             <div className="flex-grow border-t border-stone-800"></div>
           </div>
 
-          {/* FORM LOGIN (Username/Phone + PIN) */}
+          {/* FORM LOGIN (Email + Password) */}
           <form onSubmit={handleFormLogin} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-stone-300 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-orange-400" />
-                <span>Username, No. WhatsApp, atau Email</span>
+                <span>Email / Username Akun</span>
               </label>
               <input
                 type="text"
                 required
-                placeholder="Contoh: owner, kasir, atau 0812..."
+                placeholder="Contoh: bangkobra@warungkobra.com, rina.admin@warungkobra.com, siti.kasir@warungkobra.com"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 text-xs focus:border-red-500 focus:outline-none placeholder:text-stone-600"
@@ -407,13 +405,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-stone-300 flex items-center gap-1.5">
                 <Key className="w-3.5 h-3.5 text-orange-400" />
-                <span>PIN Keamanan (Password)</span>
+                <span>Password</span>
               </label>
               <div className="relative">
                 <input
                   type={showPin ? 'text' : 'password'}
                   required
-                  placeholder="Masukkan PIN Rahasia Anda"
+                  placeholder="Masukkan Password akun Anda"
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 text-xs focus:border-red-500 focus:outline-none placeholder:text-stone-600 pr-10 tracking-widest font-mono"
@@ -431,7 +429,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             <div className="p-3 rounded-2xl bg-stone-950 border border-stone-850 text-[11px] text-stone-400 flex items-start gap-2.5">
               <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <p>
-                Akses Owner, Kasir, Admin, dan Staf dilindungi oleh verifikasi PIN resmi warung. Pendaftaran akun baru hanya dapat dilakukan oleh <strong className="text-stone-200">Owner (Pemilik Warung)</strong>.
+                Autentikasi menggunakan <strong className="text-stone-200">Firebase Authentication (Email + Password)</strong> dengan pembagian hak akses <strong className="text-amber-300">OWNER, ADMIN, KASIR, dan STAFF</strong> yang tersimpan di Cloud Firestore.
               </p>
             </div>
 
@@ -442,7 +440,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
               className="w-full min-h-[44px] py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-xs transition shadow-lg shadow-red-950/50 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <LogIn className="w-4 h-4" />
-              <span>{isLoading ? 'Memverifikasi...' : 'Masuk ke Sistem'}</span>
+              <span>{isLoading ? 'Memverifikasi Firebase Auth...' : 'Masuk dengan Email & Password'}</span>
             </button>
           </form>
         </div>

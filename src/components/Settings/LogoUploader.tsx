@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { StoreSettings } from '../../types';
 import { BrandLogo, DEFAULT_STORE_LOGO } from '../Common/BrandLogo';
+import { uploadImageToFirebaseStorage } from '../../services/firebase';
 
 interface LogoUploaderProps {
   currentLogoUrl: string;
@@ -153,8 +154,17 @@ export const LogoUploader: React.FC<LogoUploaderProps> = ({
 
           setLogoPreview(compressedDataUrl);
           onLogoChange(compressedDataUrl);
-          setIsProcessing(false);
-          if (showToast) showToast('Logo baru berhasil diunggah & diterapkan!', 'success');
+          uploadImageToFirebaseStorage(compressedDataUrl, 'logos')
+            .then((cloudUrl) => {
+              setLogoPreview(cloudUrl);
+              onLogoChange(cloudUrl);
+              setIsProcessing(false);
+              if (showToast) showToast('Logo berhasil diunggah ke Firebase Storage & diterapkan!', 'success');
+            })
+            .catch(() => {
+              setIsProcessing(false);
+              if (showToast) showToast('Logo baru berhasil diunggah & diterapkan!', 'success');
+            });
         } else {
           const rawResult = e.target?.result as string;
           setLogoPreview(rawResult);

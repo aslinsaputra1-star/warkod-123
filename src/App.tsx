@@ -63,6 +63,7 @@ import {
   saveSettingsToFirebase,
   subscribeToFirebaseSettings,
   subscribeToFirebaseUsers,
+  saveRegisteredUserToFirebase,
   subscribeToFirebaseStockMutations,
   saveStockMutationToFirebase,
   subscribeToAuthState,
@@ -382,6 +383,11 @@ export default function App() {
           };
         });
         StorageService.saveUsers(merged);
+      } else {
+        const initialUsers = StorageService.getUsers();
+        if (initialUsers.length > 0) {
+          initialUsers.forEach((u) => saveRegisteredUserToFirebase(u).catch(() => {}));
+        }
       }
     });
 

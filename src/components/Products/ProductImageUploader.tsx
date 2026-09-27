@@ -16,6 +16,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { ProductCategory } from '../../types';
+import { uploadImageToFirebaseStorage } from '../../services/firebase';
 
 interface ProductImageUploaderProps {
   currentImageUrl: string;
@@ -219,8 +220,17 @@ export const ProductImageUploader: React.FC<ProductImageUploaderProps> = ({
 
           setPreviewUrl(compressedDataUrl);
           onImageChange(compressedDataUrl);
-          setIsProcessing(false);
-          if (showToast) showToast('Foto menu berhasil diunggah & dioptimalkan!', 'success');
+          uploadImageToFirebaseStorage(compressedDataUrl, 'products')
+            .then((cloudUrl) => {
+              setPreviewUrl(cloudUrl);
+              onImageChange(cloudUrl);
+              setIsProcessing(false);
+              if (showToast) showToast('Foto menu berhasil diunggah ke Firebase Storage!', 'success');
+            })
+            .catch(() => {
+              setIsProcessing(false);
+              if (showToast) showToast('Foto menu berhasil diunggah & dioptimalkan!', 'success');
+            });
         } else {
           const rawResult = e.target?.result as string;
           setPreviewUrl(rawResult);

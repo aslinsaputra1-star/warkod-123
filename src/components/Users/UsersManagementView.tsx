@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Shield,
@@ -24,7 +24,11 @@ import {
 } from 'lucide-react';
 import { WarungUser, UserRole, StoreSettings } from '../../types';
 import { StorageService } from '../../services/storage';
-import { saveRegisteredUserToFirebase, deleteUserFromFirebase } from '../../services/firebase';
+import {
+  saveRegisteredUserToFirebase,
+  deleteUserFromFirebase,
+  subscribeToFirebaseUsers,
+} from '../../services/firebase';
 import { formatRupiah } from '../../utils/formatters';
 import {
   ROLE_CONFIGS,
@@ -53,10 +57,30 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   // Form State
   const [formName, setFormName] = useState('');
   const [formUsername, setFormUsername] = useState('');
+  const [formEmail, setFormEmail] = useState('');
   const [formRole, setFormRole] = useState<UserRole>('KASIR');
   const [formPin, setFormPin] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formStatus, setFormStatus] = useState<'Aktif' | 'Nonaktif'>('Aktif');
+
+  // Subscribe to Firestore Users in real-time
+  useEffect(() => {
+    const unsub = subscribeToFirebaseUsers((remoteUsers) => {
+      if (remoteUsers && remoteUsers.length > 0) {
+        const localUsers = StorageService.getUsers();
+        const merged = remoteUsers.map((ru) => {
+          const matched = localUsers.find((lu) => lu.id === ru.id || lu.username === ru.username);
+          return {
+            ...ru,
+            pin: matched?.pin || ru.pin || '1234',
+          };
+        });
+        setUsers(merged);
+        StorageService.saveUsers(merged);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Quick switch active cashier
   const handleSetActiveCashier = (user: WarungUser) => {
@@ -77,6 +101,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
     setEditingUser(null);
     setFormName('');
     setFormUsername('');
+    setFormEmail('');
     setFormRole('KASIR');
     setFormPin('');
     setFormPhone('');
@@ -88,6 +113,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
     setEditingUser(user);
     setFormName(user.nama);
     setFormUsername(user.username);
+    setFormEmail(user.email || `${user.username}@warungkobra.com`);
     setFormRole(user.role);
     setFormPin(user.pin);
     setFormPhone(user.no_hp || '');
@@ -98,15 +124,19 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formPin.trim()) {
-      showToast('Nama kasir dan PIN wajib diisi!', 'error');
+      showToast('Nama lengkap dan Password wajib diisi!', 'error');
       return;
     }
+
+    const cleanUsername = formUsername.trim() || formName.toLowerCase().replace(/\s+/g, '');
+    const cleanEmail = formEmail.trim() || `${cleanUsername}@warungkobra.com`;
 
     if (editingUser) {
       const updated: WarungUser = {
         ...editingUser,
         nama: formName.trim(),
-        username: formUsername.trim() || formName.toLowerCase().replace(/\s+/g, ''),
+        username: cleanUsername,
+        email: cleanEmail,
         role: formRole,
         pin: formPin.trim(),
         no_hp: formPhone.trim(),
@@ -115,12 +145,13 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       const updatedList = StorageService.updateUser(updated);
       setUsers(updatedList);
       saveRegisteredUserToFirebase(updated).catch(() => {});
-      showToast(`Pengguna "${formName}" berhasil diperbarui`, 'success');
+      showToast(`Pengguna "${formName}" berhasil diperbarui di Firestore`, 'success');
     } else {
       const newUser: WarungUser = {
         id: `USR-${Date.now()}`,
         nama: formName.trim(),
-        username: formUsername.trim() || formName.toLowerCase().replace(/\s+/g, ''),
+        username: cleanUsername,
+        email: cleanEmail,
         role: formRole,
         pin: formPin.trim(),
         no_hp: formPhone.trim(),
@@ -132,7 +163,7 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
       const updatedList = StorageService.addUser(newUser);
       setUsers(updatedList);
       saveRegisteredUserToFirebase(newUser).catch(() => {});
-      showToast(`Pengguna baru "${formName}" berhasil didaftarkan oleh Owner`, 'success');
+      showToast(`Pengguna baru "${formName}" (${formRole}) berhasil disimpan ke Firestore`, 'success');
     }
 
     setIsModalOpen(false);
@@ -596,6 +627,20 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
                 />
               </div>
 
+              <div className="space-y-1">
+                <label className="text-xs font-extrabold text-stone-300 block">
+                  Email Login (Firebase Auth) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={formEmail}
+                  onChange={(e) => setFormEmail(e.target.value)}
+                  placeholder="kasir1@warungkobra.com"
+                  className="w-full min-h-[44px] bg-stone-950 border-2 border-stone-700 focus:border-red-600 rounded-2xl px-4 text-xs text-white focus:outline-none font-mono"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-stone-300 block">
@@ -612,15 +657,14 @@ export const UsersManagementView: React.FC<UsersManagementViewProps> = ({
 
                 <div className="space-y-1">
                   <label className="text-xs font-extrabold text-stone-300 block">
-                    PIN Masuk <span className="text-red-500">*</span>
+                    Password Login <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="password"
                     required
-                    maxLength={6}
                     value={formPin}
                     onChange={(e) => setFormPin(e.target.value)}
-                    placeholder="4-6 digit angka"
+                    placeholder="Minimal 4-6 karakter"
                     className="w-full min-h-[44px] bg-stone-950 border-2 border-stone-700 focus:border-red-600 rounded-2xl px-3 text-xs text-white focus:outline-none font-mono tracking-widest"
                   />
                 </div>

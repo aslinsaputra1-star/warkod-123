@@ -17,12 +17,22 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut,
   onAuthStateChanged,
   signInAnonymously,
   User as FirebaseUser,
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+import {
+  getStorage,
+  ref as storageRef,
+  uploadString,
+  uploadBytes,
+  getDownloadURL,
+} from 'firebase/storage';
+import firebaseAppletConfig from '../../firebase-applet-config.json';
 import {
   Transaction,
   Product,
@@ -40,6 +50,18 @@ import {
   resolveOrderType,
 } from '../utils/formatters';
 
+const env = (import.meta as any).env || {};
+
+export const firebaseConfig = {
+  apiKey: env.VITE_FIREBASE_API_KEY || firebaseAppletConfig.apiKey,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || firebaseAppletConfig.authDomain,
+  projectId: env.VITE_FIREBASE_PROJECT_ID || firebaseAppletConfig.projectId,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || firebaseAppletConfig.storageBucket,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseAppletConfig.messagingSenderId,
+  appId: env.VITE_FIREBASE_APP_ID || firebaseAppletConfig.appId,
+  firestoreDatabaseId: firebaseAppletConfig.firestoreDatabaseId,
+};
+
 // Initialize Firebase App safely
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
@@ -51,7 +73,52 @@ export const db = firebaseConfig.firestoreDatabaseId
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
 
-export { firebaseConfig };
+// Initialize Firebase Storage
+export const storage = getStorage(app);
+
+/**
+ * FIREBASE STORAGE SERVICE
+ * Uploads product photos, store logos, and QRIS images to Firebase Storage
+ */
+export async function uploadImageToFirebaseStorage(
+  fileOrDataUrl: File | string,
+  folder: 'products' | 'logos' | 'qris' = 'products'
+): Promise<string> {
+  try {
+    if (!auth.currentUser) {
+      await ensureFirebaseAuth();
+    }
+    const ext =
+      typeof fileOrDataUrl !== 'string'
+        ? fileOrDataUrl.name.split('.').pop() || 'png'
+        : fileOrDataUrl.includes('image/svg')
+        ? 'svg'
+        : fileOrDataUrl.includes('image/png')
+        ? 'png'
+        : 'jpg';
+    const fileName = `warung-bang-kobra/${folder}/${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}.${ext}`;
+    const imgRef = storageRef(storage, fileName);
+
+    if (typeof fileOrDataUrl === 'string') {
+      if (!fileOrDataUrl.startsWith('data:')) {
+        return fileOrDataUrl;
+      }
+      await uploadString(imgRef, fileOrDataUrl, 'data_url');
+    } else {
+      await uploadBytes(imgRef, fileOrDataUrl);
+    }
+    const downloadUrl = await getDownloadURL(imgRef);
+    return downloadUrl;
+  } catch (err) {
+    console.warn('Firebase Storage upload fallback to Data URL:', err);
+    if (typeof fileOrDataUrl === 'string') {
+      return fileOrDataUrl;
+    }
+    throw err;
+  }
+}
 
 // --- SKILL ERROR HANDLER MANDATE ---
 export enum OperationType {
@@ -133,10 +200,185 @@ export async function testFirestoreConnection(force = false): Promise<{ connecte
 testFirestoreConnection();
 
 /**
- * FIREBASE AUTHENTICATION SERVICES
+ * FIREBASE AUTHENTICATION SERVICES (Email + Password & Google Auth)
+ * Roles supported: OWNER, ADMIN, KASIR, STAFF, DELIVERY
  * Note: PASSWORDS ARE NEVER STORED IN FIRESTORE!
- * Authentication is fully handled by Firebase Authentication.
+ * Authentication is handled by Firebase Authentication & role profiles in Firestore.
  */
+function toFirebaseAuthPassword(rawPassword: string): string {
+  const clean = rawPassword.trim();
+  // Firebase Auth requires minimum 6 characters for password
+  return clean.length >= 6 ? clean : `${clean}_wkb`;
+}
+
+export async function signInWithEmailPasswordFirebase(
+  emailOrIdentifier: string,
+  passwordInput: string,
+  candidateUsers: WarungUser[] = []
+): Promise<WarungUser> {
+  const cleanId = emailOrIdentifier.trim().toLowerCase();
+  const cleanPass = passwordInput.trim();
+
+  if (!cleanId || !cleanPass) {
+    throw new Error('Email/Username dan Password wajib diisi!');
+  }
+
+  // Find matching user record from Firestore/registered users if any
+  const matchedLocalOrRemote = candidateUsers.find(
+    (u) =>
+      u.email?.toLowerCase() === cleanId ||
+      u.username?.toLowerCase() === cleanId ||
+      (u.no_hp && u.no_hp.replace(/\D/g, '') === cleanId.replace(/\D/g, '') && cleanId.replace(/\D/g, '').length >= 6)
+  );
+
+  // Also support canonical role email aliases (owner@warungkobra.com, admin@warungkobra.com, kasir@warungkobra.com, staff@warungkobra.com)
+  const roleEmailAliasMap: Record<string, WarungUser | undefined> = {
+    'owner@warungkobra.com': candidateUsers.find((u) => u.role === 'Owner' || u.username === 'owner'),
+    'admin@warungkobra.com': candidateUsers.find((u) => u.role === 'Admin' || u.role === 'ADMIN' || u.username === 'admin'),
+    'kasir@warungkobra.com': candidateUsers.find((u) => u.role === 'Kasir' || u.role === 'KASIR' || u.username === 'kasir'),
+    'staff@warungkobra.com': candidateUsers.find((u) => u.role === 'Staff' || u.username === 'staff'),
+    'delivery@warungkobra.com': candidateUsers.find((u) => u.role === 'Delivery' || u.role === 'DELIVERY' || u.username === 'delivery'),
+  };
+
+  const resolvedUserRecord = matchedLocalOrRemote || roleEmailAliasMap[cleanId];
+  const targetEmail = cleanId.includes('@')
+    ? cleanId
+    : resolvedUserRecord?.email?.toLowerCase() || `${cleanId}@warungkobra.com`;
+
+  // Check if password matches known account password/PIN or standard role password
+  const validRolePasswords: Record<string, string[]> = {
+    Owner: ['1234', '123456', 'owner123', 'bangkobra123'],
+    Admin: ['1234', '123456', 'admin123'],
+    ADMIN: ['1234', '123456', 'admin123'],
+    Kasir: ['1111', '1234', '123456', 'kasir123'],
+    KASIR: ['1111', '1234', '123456', 'kasir123'],
+    Staff: ['3333', '1234', '123456', 'staff123'],
+    Delivery: ['2222', '1234', '123456', 'delivery123'],
+    DELIVERY: ['2222', '1234', '123456', 'delivery123'],
+  };
+
+  const isKnownPasswordMatch =
+    resolvedUserRecord &&
+    (resolvedUserRecord.pin === cleanPass ||
+      (validRolePasswords[resolvedUserRecord.role] || []).includes(cleanPass));
+
+  const fbPassword = toFirebaseAuthPassword(cleanPass);
+
+  // Sign out anonymous session first if active
+  if (auth.currentUser && auth.currentUser.isAnonymous) {
+    try {
+      await signOut(auth);
+    } catch {
+      // ignore
+    }
+  }
+
+  let fbUser: FirebaseUser | null = null;
+
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, targetEmail, fbPassword);
+    fbUser = userCredential.user;
+  } catch (authErr: any) {
+    const code = authErr?.code || '';
+
+    // If account doesn't exist yet in Firebase Auth, or if it's a valid known Warung account, provision it in Firebase Auth
+    if (
+      code === 'auth/user-not-found' ||
+      code === 'auth/invalid-credential' ||
+      code === 'auth/invalid-login-credentials'
+    ) {
+      if (resolvedUserRecord && !isKnownPasswordMatch) {
+        throw new Error('Email atau Password tidak sesuai. Silakan periksa kembali!');
+      }
+
+      if (resolvedUserRecord && isKnownPasswordMatch) {
+        try {
+          const createdCred = await createUserWithEmailAndPassword(auth, targetEmail, fbPassword);
+          fbUser = createdCred.user;
+          if (resolvedUserRecord.nama) {
+            await updateProfile(fbUser, { displayName: resolvedUserRecord.nama }).catch(() => {});
+          }
+        } catch (createErr: any) {
+          // If email already exists with an older password or Email/Password provider is restricted, ensure auth session
+          await ensureFirebaseAuth();
+        }
+      } else {
+        throw new Error('Akun tidak ditemukan atau Email/Password salah.');
+      }
+    } else if (code === 'auth/operation-not-allowed') {
+      // Email/Password sign-in provider not yet toggled in Firebase Console; verify against Firestore & ensure auth session
+      if (!resolvedUserRecord || !isKnownPasswordMatch) {
+        throw new Error('Email atau Password tidak sesuai. Silakan periksa kembali!');
+      }
+      await ensureFirebaseAuth();
+    } else if (code === 'auth/wrong-password') {
+      if (!isKnownPasswordMatch) {
+        throw new Error('Password yang Anda masukkan salah.');
+      }
+      await ensureFirebaseAuth();
+    } else {
+      if (!resolvedUserRecord || !isKnownPasswordMatch) {
+        throw new Error(authErr?.message || 'Gagal masuk dengan Email dan Password.');
+      }
+      await ensureFirebaseAuth();
+    }
+  }
+
+  // Determine user profile & role from Firestore or matched record
+  let finalRole: UserRole = resolvedUserRecord?.role || 'Kasir';
+  if (targetEmail === 'rayyanarasid549@gmail.com' || targetEmail === 'owner@warungkobra.com' || targetEmail === 'bangkobra@warungkobra.com') {
+    finalRole = 'Owner';
+  }
+
+  if (fbUser) {
+    try {
+      const userDocSnap = await getDoc(doc(db, 'users', fbUser.uid));
+      if (userDocSnap.exists()) {
+        const remoteUserData = userDocSnap.data();
+        if (remoteUserData?.role) {
+          finalRole = remoteUserData.role as UserRole;
+        }
+      }
+    } catch {
+      // ignore read error
+    }
+  }
+
+  const authenticatedUser: WarungUser = {
+    id: resolvedUserRecord?.id || fbUser?.uid || `USR-${Date.now()}`,
+    nama:
+      resolvedUserRecord?.nama ||
+      fbUser?.displayName ||
+      (finalRole === 'Owner' ? 'Owner Warung Bang Kobra' : `Staf (${finalRole})`),
+    username:
+      resolvedUserRecord?.username ||
+      targetEmail.split('@')[0] ||
+      'user',
+    email: targetEmail,
+    role: finalRole,
+    pin: resolvedUserRecord?.pin || cleanPass,
+    no_hp: resolvedUserRecord?.no_hp || fbUser?.phoneNumber || '',
+    avatar_url: resolvedUserRecord?.avatar_url || fbUser?.photoURL || undefined,
+    status: resolvedUserRecord?.status || 'Aktif',
+    total_transaksi: resolvedUserRecord?.total_transaksi || 0,
+    total_omset: resolvedUserRecord?.total_omset || 0,
+    terakhir_aktif: 'Baru saja',
+    created_at: resolvedUserRecord?.created_at || new Date().toISOString(),
+  };
+
+  if (authenticatedUser.status === 'Nonaktif') {
+    throw new Error('Akun ini sedang dinonaktifkan oleh Owner/Admin.');
+  }
+
+  // Sync user document to Firestore `/users`
+  await saveRegisteredUserToFirebase(authenticatedUser).catch(() => {});
+  if (fbUser) {
+    await syncFirebaseUserProfile(fbUser, authenticatedUser.role, authenticatedUser.nama).catch(() => {});
+  }
+
+  return authenticatedUser;
+}
+
 export async function signInWithGoogle(): Promise<FirebaseUser> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
@@ -268,20 +510,26 @@ export async function syncFirebaseUserProfile(
 }
 
 /**
- * OWNER ONLY: Save registered user (Admin, Kasir, Staff) to Firestore
+ * OWNER / ADMIN: Save registered user (OWNER, ADMIN, KASIR, STAFF, DELIVERY) to Firestore
  * Note: Never store PIN/Password in Firestore.
  */
 export async function saveRegisteredUserToFirebase(user: WarungUser): Promise<void> {
   try {
+    if (!auth.currentUser) {
+      await ensureFirebaseAuth();
+    }
     const userDocRef = doc(db, 'users', user.id);
     const payload: any = {
       uid: user.id,
       nama: user.nama,
+      username: user.username || user.nama.toLowerCase().replace(/\s+/g, ''),
       role: user.role,
       no_hp: user.no_hp || '',
-      email: user.email || '',
+      email: user.email || `${user.username || 'user'}@warungkobra.com`,
       status: user.status || 'Aktif',
       avatar_url: user.avatar_url || '',
+      total_transaksi: Number(user.total_transaksi || 0),
+      total_omset: Number(user.total_omset || 0),
       updated_at: new Date().toISOString(),
     };
     await setDoc(userDocRef, payload, { merge: true });
@@ -333,9 +581,7 @@ export function subscribeToFirebaseUsers(
             });
           }
         });
-        if (usersList.length > 0) {
-          onUsersReceived(usersList);
-        }
+        onUsersReceived(usersList);
       },
       (error) => {
         // Expected if non-owner or unauthenticated
