@@ -1,12 +1,11 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 
-let aiClient: GoogleGenAI | null = null;
-function getAIClient(): GoogleGenAI {
+let aiClient: any = null;
+async function getAIClient() {
   if (!aiClient) {
+    const { GoogleGenAI } = await import("@google/genai");
     aiClient = new GoogleGenAI({
       apiKey: process.env.GEMINI_API_KEY,
       httpOptions: {
@@ -96,7 +95,7 @@ async function startServer() {
         });
       }
 
-      const ai = getAIClient();
+      const ai = await getAIClient();
 
       const storeName = context?.storeName || "Warung Bang Kobra";
       const storeSlogan = context?.storeSlogan || "Pedasnya Nampol, Rasanya Juara!";
@@ -160,25 +159,44 @@ ${lowStockAlerts}`;
 
   // Vite middleware for development or static serving for production
   const distPath = path.join(process.cwd(), "dist");
-  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
-  const isProduction = process.env.NODE_ENV === "production" || (hasDist && process.env.NODE_ENV !== "development");
+  let viteMiddleware: express.RequestHandler | null = null;
 
-  if (isProduction && hasDist) {
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  } else {
-    const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  }
+  // Serve static build assets when present
+  app.use(express.static(distPath, { index: false }));
 
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api/")) {
+      return next();
+    }
+    if (viteMiddleware) {
+      return viteMiddleware(req, res, next);
+    }
+    const indexHtmlPath = path.join(distPath, "index.html");
+    if (fs.existsSync(indexHtmlPath)) {
+      return res.sendFile(indexHtmlPath);
+    }
+    return next();
+  });
+
+  // Listen on port 3000 immediately so control-plane health checks never time out
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
+
+  // Initialize Vite dev middleware in the background if not strictly serving prebuilt production dist
+  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
+  if (process.env.NODE_ENV !== "production" && !hasDist) {
+    try {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true, hmr: false },
+        appType: "spa",
+      });
+      viteMiddleware = vite.middlewares;
+    } catch (err) {
+      console.error("Vite server initialization error:", err);
+    }
+  }
 }
 
 startServer();
